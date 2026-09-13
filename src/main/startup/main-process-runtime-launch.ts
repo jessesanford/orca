@@ -9,6 +9,7 @@ import {
 import { OrcaRuntimeRpcServer } from '../runtime/runtime-rpc'
 import { registerMobileHandlers } from '../ipc/mobile'
 import { getLocalPtyProvider, registerHeadlessPtyRuntime } from '../ipc/pty'
+import { registerSshHandlers } from '../ipc/ssh'
 import { LocalPtyProvider } from '../providers/local-pty-provider'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-types'
 import { OffscreenBrowserBackend } from '../browser/offscreen-browser-backend'
@@ -144,6 +145,13 @@ async function launchServeMode(
     prepareCodexSessionResumeForLaunch,
     { onCodexHomePtySpawned: handleCodexHomePtySpawned, onPtyExit: handlePtyExit }
   )
+  // Why: headless serve never runs attachMainWindowServices, so without this the SSH
+  // layer stays unregistered and every `ssh.connect` from a paired client throws
+  // `ssh_handlers_not_registered` — remote (devpod) terminals can never spawn. The
+  // window getter is only used for renderer broadcasts, so `() => null` is correct
+  // here: there is no renderer to notify, and the connection manager + relay stack
+  // are fully wired regardless.
+  registerSshHandlers(state.store!, () => null, runtime)
   await runtime.refreshRestoredOrchestrationAuthority()
   await runtime.reconcileLegacyWorkerTerminals()
   // Why: headless servers can't mount <webview> panes; use offscreen WebContents, gated on a real display so browser.headless.v1 stays honest.
