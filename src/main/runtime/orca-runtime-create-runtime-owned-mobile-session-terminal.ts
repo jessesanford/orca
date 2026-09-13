@@ -11,6 +11,8 @@ import type {
 import { randomUUID } from 'node:crypto'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import { placeCreatedSessionTab } from '../../shared/session-tab-placement'
+import { getSshPtyProvider } from '../ipc/pty'
+import { connectRegisteredSshTarget } from '../ssh/ssh-target-registry'
 import {
   buildHeadlessMobileSessionTabGroups,
   buildMaterializedHeadlessParentLayout,
@@ -38,6 +40,12 @@ export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends Orca
     } = {}
   ): Promise<RuntimeMobileSessionCreateTerminalResult> {
     const workspace = await this.resolveTerminalWorkspaceLaunchScope(`id:${worktreeId}`)
+    // Why: in headless serve mode there is no desktop renderer to proactively connect the SSH
+    // target when the worktree opens. A mobile client creating a terminal expects the relay to be
+    // established automatically, so we connect on demand before attempting to spawn the PTY.
+    if (workspace.connectionId && !getSshPtyProvider(workspace.connectionId)) {
+      await connectRegisteredSshTarget(workspace.connectionId)
+    }
     const cwd = this.resolveWorkspaceTerminalStartupCwd(workspace, opts.cwd)
     // Why: SshPtyProvider treats sessionId as a relay reattach; only synthesize local serve ids so SSH fresh terminals still call pty.spawn.
     const stableSessionId =
