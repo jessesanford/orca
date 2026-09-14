@@ -54,6 +54,8 @@ export async function printServeReady(options: ServeOptions): Promise<void> {
   const advertised = boundEndpoint
     ? resolveAdvertisedPairingEndpoint(boundEndpoint, options.pairingAddress)
     : null
+  const primaryScope = (options.mobilePairing ? 'mobile' : 'runtime') as 'mobile' | 'runtime'
+  const secondaryScope = (options.mobilePairing ? 'runtime' : 'mobile') as 'mobile' | 'runtime'
   const pairing = options.noPairing
     ? ({
         available: false,
@@ -63,8 +65,17 @@ export async function printServeReady(options: ServeOptions): Promise<void> {
     : runtimeRpc.createPairingOffer({
         address: options.pairingAddress,
         name: `${options.mobilePairing ? 'Mobile' : 'CLI'} ${new Date().toLocaleDateString()}`,
-        scope: options.mobilePairing ? 'mobile' : 'runtime'
+        scope: primaryScope
       })
+  const secondaryPairing =
+    pairing.available && !options.noPairing
+      ? runtimeRpc.createPairingOffer({
+          address: options.pairingAddress,
+          name: `${options.mobilePairing ? 'CLI' : 'Mobile'} ${new Date().toLocaleDateString()}`,
+          scope: secondaryScope,
+          rotate: true
+        })
+      : null
   const pairingQr =
     pairing.available && options.mobilePairing
       ? await renderTerminalPairingQr(pairing.pairingUrl)
@@ -83,7 +94,7 @@ export async function printServeReady(options: ServeOptions): Promise<void> {
             endpoint: pairing.endpoint,
             deviceId: pairing.deviceId,
             webClientUrl: pairing.webClientUrl,
-            scope: options.mobilePairing ? 'mobile' : 'runtime',
+            scope: primaryScope,
             qr: pairingQr
           }
         : pairing
@@ -92,5 +103,10 @@ export async function printServeReady(options: ServeOptions): Promise<void> {
       ? { mode: 'recipe-json', projectRoot: options.projectRoot! }
       : { mode: options.json ? 'json' : 'human' }
   )
+  if (secondaryPairing?.available) {
+    console.log(
+      `${secondaryScope === 'mobile' ? 'Mobile' : 'Runtime'} pairing URL: ${secondaryPairing.pairingUrl}`
+    )
+  }
   notifyServeSupervisorReady(runtime.getRuntimeId())
 }
