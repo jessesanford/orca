@@ -122,6 +122,7 @@ export class RpcStreamingDispatcher {
             recordMutationReceipt: mutation?.recordReceipt,
             orchestrationMutation: mutation?.identity,
             pairing: options?.pairing,
+            localPairing: options?.localPairing,
             sendBinary: options?.sendBinary,
             registerBinaryStreamHandler: options?.registerBinaryStreamHandler,
             registerBinaryMessageHandler: options?.registerBinaryMessageHandler,
@@ -169,6 +170,7 @@ export class RpcStreamingDispatcher {
           updateClientCapabilities: options?.updateClientCapabilities,
           orchestrationCapability: request.orchestrationCapability,
           pairing: options?.pairing,
+          localPairing: options?.localPairing,
           sendBinary: options?.sendBinary,
           registerBinaryStreamHandler: options?.registerBinaryStreamHandler,
           registerBinaryMessageHandler: options?.registerBinaryMessageHandler
