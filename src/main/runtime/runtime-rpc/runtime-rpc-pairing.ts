@@ -8,8 +8,13 @@ import type {
 } from '../relay/relay-revoke-outbox'
 import type { PushUnregisterOutbox } from '../push/push-unregister-outbox'
 import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../../shared/pairing'
+import type {
+  PairingCreateOfferParams,
+  PairingCreateOfferResult
+} from '../../../shared/mobile-relay-credential-contract'
 import type { RuntimePairingReach } from '../../../shared/runtime-pairing-reach'
 import { resolveAdvertisedPairingEndpoint } from '../pairing-endpoint'
+import { renderTerminalPairingQr } from '../pairing-qr'
 import { RuntimeRpcNetworkExposure } from './runtime-rpc-network-exposure'
 import {
   createWebClientUrl,
@@ -120,6 +125,37 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
   getWebSocketEndpoint(): string | null {
     const ws = this.transports.find((t) => t.kind === 'websocket')
     return ws?.endpoint ?? null
+  }
+
+  // Why: unix-socket operator path (headless brokers). Unlike the startup
+  // readiness offers this is minted on demand — no serve restart, so a pairing
+  // flow never bounces connected SSH targets. Implements the optional hook
+  // declared on RuntimeRpcRequestAdmission.
+  protected async createLocalPairingOffer(
+    params: PairingCreateOfferParams
+  ): Promise<PairingCreateOfferResult> {
+    const scope = params.scope ?? 'runtime'
+    const offer = this.createPairingOffer({
+      address: params.address,
+      name: params.name ?? `Operator ${new Date().toLocaleDateString()}`,
+      rotate: params.rotate,
+      scope,
+      // Why: operator-minted offers are always meant for clients on the
+      // network path; 'this-computer' would strand the paired device.
+      reach: 'network'
+    })
+    if (!offer.available) {
+      return { available: false, reason: offer.reason, guidance: offer.guidance }
+    }
+    return {
+      available: true,
+      pairingUrl: offer.pairingUrl,
+      endpoint: offer.endpoint,
+      deviceId: offer.deviceId,
+      webClientUrl: offer.webClientUrl,
+      scope,
+      qr: scope === 'mobile' ? await renderTerminalPairingQr(offer.pairingUrl) : null
+    }
   }
 
   createPairingOffer(args: {

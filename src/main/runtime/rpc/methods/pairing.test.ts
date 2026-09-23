@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from '../../orca-runtime'
 import { RpcDispatcher } from '../dispatcher'
+import type { LocalPairingRpcContext, PairingRpcContext } from '../core'
 import { PAIRING_METHODS } from './pairing'
 
 function dispatchPairing(
   method: string,
   params: unknown,
-  pairing: NonNullable<Parameters<RpcDispatcher['dispatchStreaming']>[2]>['pairing']
+  pairing: PairingRpcContext | undefined,
+  localPairing?: LocalPairingRpcContext
 ): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
     const dispatcher = new RpcDispatcher({
@@ -16,7 +18,7 @@ function dispatchPairing(
     void dispatcher.dispatchStreaming(
       { id: 'request-1', authToken: '', method, params },
       (response) => resolve(JSON.parse(response) as Record<string, unknown>),
-      { pairing }
+      { pairing, localPairing }
     )
   })
 }
@@ -71,5 +73,48 @@ describe('pairing RPC methods', () => {
     ).resolves.toMatchObject({ ok: false, error: { code: 'invalid_argument' } })
     expect(pairing.provisionRelay).not.toHaveBeenCalled()
     expect(pairing.getEndpoints).not.toHaveBeenCalled()
+  })
+
+  it('mints an operator pairing offer through the unix-socket context', async () => {
+    const createOffer = vi.fn().mockResolvedValue({
+      available: true,
+      pairingUrl: 'orca://pair?code=abc',
+      endpoint: 'ws://10.0.0.1:6768',
+      deviceId: 'dev-1',
+      webClientUrl: null,
+      scope: 'mobile',
+      qr: 'QR-ART'
+    })
+
+    await expect(
+      dispatchPairing('pairing.createOffer', { scope: 'mobile', rotate: true }, undefined, {
+        createOffer
+      })
+    ).resolves.toMatchObject({
+      ok: true,
+      result: { pairingUrl: 'orca://pair?code=abc', scope: 'mobile', qr: 'QR-ART' }
+    })
+    expect(createOffer).toHaveBeenCalledWith({ scope: 'mobile', rotate: true })
+  })
+
+  it('reports unavailable when the operator pairing context is absent', async () => {
+    await expect(dispatchPairing('pairing.createOffer', {}, undefined)).resolves.toMatchObject({
+      ok: false
+    })
+  })
+
+  it('rejects malformed createOffer params', async () => {
+    const createOffer = vi.fn()
+    for (const bad of [
+      { scope: 'satellite' },
+      { name: '' },
+      { rotate: 'yes' },
+      { unexpected: true }
+    ]) {
+      await expect(
+        dispatchPairing('pairing.createOffer', bad, undefined, { createOffer })
+      ).resolves.toMatchObject({ ok: false, error: { code: 'invalid_argument' } })
+    }
+    expect(createOffer).not.toHaveBeenCalled()
   })
 })

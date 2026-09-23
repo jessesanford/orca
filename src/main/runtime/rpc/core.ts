@@ -4,6 +4,8 @@ import type { TerminalStreamFrame } from '../../../shared/terminal-stream-protoc
 import type { OrcaRuntimeService, OrchestrationCompatibilityCallerAuthority } from '../orca-runtime'
 import type {
   DeviceCredentialInstalled,
+  PairingCreateOfferParams,
+  PairingCreateOfferResult,
   PairingGetEndpointsParams,
   PairingGetEndpointsResult,
   PairingProvisionRelayParams
@@ -15,6 +17,12 @@ import type { OrchestrationSessionCaller } from '../orchestration/orchestration-
 export type PairingRpcContext = {
   getEndpoints(params: PairingGetEndpointsParams): Promise<PairingGetEndpointsResult>
   provisionRelay(params: PairingProvisionRelayParams): Promise<DeviceCredentialInstalled>
+}
+
+// Why: unix-socket operator surface — offer minting without a restart, for
+// headless serve brokers. Absent on paired-client (WebSocket) dispatches.
+export type LocalPairingRpcContext = {
+  createOffer(params: PairingCreateOfferParams): Promise<PairingCreateOfferResult>
 }
 
 export type RpcEnvelopeMeta = {
@@ -111,6 +119,7 @@ export type RpcContext = {
   // Why: federation pins the authenticated saved-environment caller without exposing its token to handlers or storage.
   authenticatedCallerFingerprint?: string
   pairing?: PairingRpcContext
+  localPairing?: LocalPairingRpcContext
   // Why: mobile terminal traffic bypasses JSON streaming; undefined on Unix/socket and non-E2EE WebSocket paths.
   sendBinary?: (bytes: Uint8Array<ArrayBufferLike>) => boolean | void
   // Why: binary terminal frames arrive outside JSON-RPC once a stream is established; handlers register only the stream IDs they created.
