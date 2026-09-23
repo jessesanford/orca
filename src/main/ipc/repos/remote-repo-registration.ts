@@ -17,6 +17,8 @@ export async function addRemoteRepoFromPath(
     displayName?: string
     kind?: 'git' | 'folder'
     setupMethod?: Repo['projectHostSetupMethod']
+    /** Skip upstream/gitRemote/repoIcon detection → repo derives a host-local `repo:` project. */
+    hostLocal?: boolean
   }
 ): Promise<{ repo: Repo; alreadyExisted: boolean } | { error: string }> {
   const gitProvider = getSshGitProvider(args.connectionId)
@@ -81,11 +83,15 @@ export async function addRemoteRepoFromPath(
     }
   }
 
-  const detected = await detectRepoIconAndUpstream({
-    repoPath: resolvedPath,
-    kind: repoKind,
-    executionHostId: toSshExecutionHostId(args.connectionId)
-  })
+  // Why: host-local registrations (headless broker per-sandbox projects) must not
+  // inherit a shared `github:` identity — detection only runs for named remote projects.
+  const detected = args.hostLocal
+    ? {}
+    : await detectRepoIconAndUpstream({
+        repoPath: resolvedPath,
+        kind: repoKind,
+        executionHostId: toSshExecutionHostId(args.connectionId)
+      })
   const repo: Repo = {
     id: randomUUID(),
     path: resolvedPath,

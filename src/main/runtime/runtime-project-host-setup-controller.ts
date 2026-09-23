@@ -18,7 +18,10 @@ import {
   parseExecutionHostId,
   type ExecutionHostId
 } from '../../shared/execution-host'
-import { getProjectIdForProviderIdentity } from '../../shared/project-host-setup-projection'
+import {
+  getProjectIdForProviderIdentity,
+  getProjectIdentityKey
+} from '../../shared/project-host-setup-projection'
 import { getProjectHostSetupForRepo } from '../../shared/project-host-setup-lookup'
 import { invalidateAuthorizedRootsCache } from '../ipc/filesystem-auth'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
@@ -34,6 +37,7 @@ type RuntimeProjectHostSetupDependencies = {
     remotePath: string
     displayName?: string
     kind: 'folder' | 'git'
+    hostLocal?: boolean
   }) => Promise<Repo>
   cloneRepo: (url: string, destination: string, hostId: ExecutionHostId) => Promise<Repo>
   invalidateResolvedWorktrees: () => void
@@ -108,10 +112,18 @@ export class RuntimeProjectHostSetupController {
           connectionId: sshTargetId,
           remotePath: args.path,
           ...(args.displayName ? { displayName: args.displayName } : {}),
-          kind
+          kind,
+          ...(args.hostLocal ? { hostLocal: true } : {})
         })
       : await this.deps.addRepo(args.path, kind, args.hostId)
-    return this.completeSetup(args, repo, !knownRepoIds.has(repo.id))
+    // Why: headless registrars can't know `repo:<id>` before the repo exists — derive it
+    // here (explicit provider identity keeps its `github:` project id).
+    const projectId =
+      args.projectId ??
+      (args.projectProviderIdentity
+        ? getProjectIdForProviderIdentity(args.projectProviderIdentity)
+        : getProjectIdentityKey(repo))
+    return this.completeSetup({ ...args, projectId }, repo, !knownRepoIds.has(repo.id))
   }
 
   async setupClone(args: ProjectHostSetupCloneArgs): Promise<ProjectHostSetupResult> {

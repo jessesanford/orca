@@ -67,13 +67,16 @@ export type ProjectHostSetup = {
 }
 
 export type ProjectHostSetupExistingFolderArgs = {
-  projectId: string
+  /** Omitted = derive after repo add (provider identity → `github:<key>`, else `repo:<id>`). */
+  projectId?: string
   projectProviderIdentity?: ProjectProviderIdentity
   hostId: ExecutionHostId
   path: string
   kind?: RepoKind
   displayName?: string
   setupMethod?: RepoProjectHostSetupMethod
+  /** Suppress detected upstream/gitRemote/repoIcon identity → host-local `repo:` project. */
+  hostLocal?: boolean
 }
 
 export type ProjectHostSetupCreateArgs = {

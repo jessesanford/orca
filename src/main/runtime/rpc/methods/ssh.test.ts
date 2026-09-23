@@ -7,20 +7,29 @@ import { SSH_METHODS } from './ssh'
 const {
   connectRegisteredSshTargetMock,
   getRegisteredSshStateMock,
+  getSshTargetRegistryStoreMock,
   listRegisteredSshTargetsMock,
-  listRegisteredRemovedSshTargetLabelsMock
+  listRegisteredRemovedSshTargetLabelsMock,
+  rotateSshProviderAuthorityMock
 } = vi.hoisted(() => ({
   connectRegisteredSshTargetMock: vi.fn(),
   getRegisteredSshStateMock: vi.fn(),
+  getSshTargetRegistryStoreMock: vi.fn(),
   listRegisteredSshTargetsMock: vi.fn(),
-  listRegisteredRemovedSshTargetLabelsMock: vi.fn()
+  listRegisteredRemovedSshTargetLabelsMock: vi.fn(),
+  rotateSshProviderAuthorityMock: vi.fn()
 }))
 
 vi.mock('../../../ssh/ssh-target-registry', () => ({
   connectRegisteredSshTarget: connectRegisteredSshTargetMock,
   getRegisteredSshState: getRegisteredSshStateMock,
+  getSshTargetRegistryStore: getSshTargetRegistryStoreMock,
   listRegisteredSshTargets: listRegisteredSshTargetsMock,
   listRegisteredRemovedSshTargetLabels: listRegisteredRemovedSshTargetLabelsMock
+}))
+
+vi.mock('../../../ssh/ssh-provider-authority', () => ({
+  rotateSshProviderAuthority: rotateSshProviderAuthorityMock
 }))
 
 function makeRequest(method: string, params?: unknown): RpcRequest {
@@ -208,5 +217,56 @@ describe('ssh RPC methods', () => {
     const response = await dispatcher.dispatch(makeRequest('ssh.listRemovedTargetLabels'))
 
     expect(response).toMatchObject({ ok: true, result: { labels } })
+  })
+
+  it('imports ssh-config targets and drains repo readoptions with authority rotation', async () => {
+    const store = {
+      importFromSshConfig: vi
+        .fn()
+        .mockReturnValue([
+          { id: 'ssh-2', label: 'sbx-demo.devpod', configHost: 'sbx-demo.devpod' }
+        ]),
+      lastRepoReadoptions: [
+        { oldTargetId: 'ssh-old', newTargetId: 'ssh-2', repoId: 'repo-1' },
+        { oldTargetId: 'ssh-old', newTargetId: 'ssh-2', repoId: 'repo-2' }
+      ]
+    }
+    getSshTargetRegistryStoreMock.mockReturnValueOnce(store)
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
+
+    const response = await dispatcher.dispatch(makeRequest('ssh.importConfig', { reAdopt: true }))
+
+    expect(store.importFromSshConfig).toHaveBeenCalledWith({ reAdopt: true })
+    expect(store.lastRepoReadoptions).toEqual([])
+    expect(rotateSshProviderAuthorityMock).toHaveBeenCalledTimes(2)
+    expect(rotateSshProviderAuthorityMock).toHaveBeenCalledWith('ssh-old')
+    expect(rotateSshProviderAuthorityMock).toHaveBeenCalledWith('ssh-2')
+    expect(response).toMatchObject({
+      ok: true,
+      result: {
+        targets: [{ id: 'ssh-2', configHost: 'sbx-demo.devpod' }],
+        repoReadoptions: [{ repoId: 'repo-1' }, { repoId: 'repo-2' }]
+      }
+    })
+  })
+
+  it('defaults ssh.importConfig params and fails closed when the registry is absent', async () => {
+    const store = { importFromSshConfig: vi.fn().mockReturnValue([]), lastRepoReadoptions: [] }
+    getSshTargetRegistryStoreMock.mockReturnValueOnce(store)
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
+
+    const response = await dispatcher.dispatch(makeRequest('ssh.importConfig'))
+
+    expect(store.importFromSshConfig).toHaveBeenCalledWith({ reAdopt: undefined })
+    expect(response).toMatchObject({ ok: true, result: { targets: [] } })
+
+    getSshTargetRegistryStoreMock.mockReturnValueOnce(null)
+    const failure = await dispatcher.dispatch(makeRequest('ssh.importConfig'))
+    expect(failure).toMatchObject({
+      ok: false,
+      error: { message: 'ssh_target_registry_unavailable' }
+    })
   })
 })
