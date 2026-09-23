@@ -1,13 +1,15 @@
 import {
   connectRegisteredSshTarget,
   getRegisteredSshState,
+  getSshTargetRegistryStore,
   listRegisteredRemovedSshTargetLabels,
   listRegisteredSshTargets
 } from '../../../ssh/ssh-target-registry'
+import { rotateSshProviderAuthority } from '../../../ssh/ssh-provider-authority'
 import { defineMethod } from '../core'
 import { getPublicSshError, getPublicSshState } from '../../public-ssh-state'
 import type { SshTargetSummary } from '../../../../shared/ssh-types'
-import { SshTarget } from '../../../../shared/rpc-contract/ssh-params'
+import { SshImportConfig, SshTarget } from '../../../../shared/rpc-contract/ssh-params'
 
 // Why: `generation` stays optional on the wire — an old server simply omits it and its rows key on target id alone.
 function listRegisteredSshTargetSummaries(): SshTargetSummary[] {
@@ -61,5 +63,28 @@ export const SSH_METHODS = [
     name: 'ssh.listRemovedTargetLabels',
     params: null,
     handler: () => ({ labels: listRegisteredRemovedSshTargetLabels() })
+  }),
+  defineMethod({
+    name: 'ssh.importConfig',
+    params: SshImportConfig,
+    // Why: headless serves have no IPC surface, so registration tooling needs the
+    // same ~/.ssh/config reconcile the desktop's Settings→Import performs, over RPC.
+    handler: (params) => {
+      const store = getSshTargetRegistryStore()
+      if (!store) {
+        throw new Error('ssh_target_registry_unavailable')
+      }
+      const targets = store.importFromSshConfig({ reAdopt: params.reAdopt })
+      // Why: mirrors the IPC handler's readoption tail (drain + provider rotation);
+      // there is no renderer to notify on a headless serve — the caller gets them here.
+      const repoReadoptions = store.lastRepoReadoptions
+      store.lastRepoReadoptions = []
+      for (const targetId of new Set(
+        repoReadoptions.flatMap(({ oldTargetId, newTargetId }) => [oldTargetId, newTargetId])
+      )) {
+        rotateSshProviderAuthority(targetId)
+      }
+      return { targets, repoReadoptions }
+    }
   })
 ]

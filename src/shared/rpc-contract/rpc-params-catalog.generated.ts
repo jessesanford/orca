@@ -457,7 +457,7 @@ import {
   DictationStart,
   SpeechModelAction
 } from './speech-params'
-import { SshTarget } from './ssh-params'
+import { SshImportConfig, SshTarget } from './ssh-params'
 import {
   AttachParams,
   CancelParams,
@@ -1088,6 +1088,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'speech.models.list': null,
   'ssh.connect': SshTarget,
   'ssh.getState': SshTarget,
+  'ssh.importConfig': SshImportConfig,
   'ssh.listRemovedTargetLabels': null,
   'ssh.listTargetSummaries': null,
   'ssh.listTargets': null,

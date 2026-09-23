@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { OptionalString, requiredString } from './rpc-param-primitives'
+import { OptionalBoolean, OptionalString, requiredString } from './rpc-param-primitives'
 import {
   LOCAL_EXECUTION_HOST_ID,
   normalizeExecutionHostId,
@@ -31,13 +31,19 @@ export const RequestedHostId = requiredString('Missing host ID').transform((valu
 })
 
 export const ProjectHostSetupExistingFolder = z.object({
-  projectId: requiredString('Missing project ID'),
+  // Why: optional so headless registrars can let the runtime derive the project
+  // (`github:<key>` from a detected/explicit identity, else host-local `repo:<id>`).
+  projectId: OptionalString,
   projectProviderIdentity: ProjectProviderIdentity.optional(),
   hostId: RequestedHostId,
   path: requiredString('Missing project path'),
   kind: z.enum(['git', 'folder']).optional(),
   displayName: OptionalString,
-  setupMethod: z.enum(['imported-existing-folder', 'cloned']).optional()
+  setupMethod: z.enum(['imported-existing-folder', 'cloned']).optional(),
+  // Why: suppress provider/gitRemote identity detection on a new repo so it maps to a
+  // host-local `repo:<id>` project — two devpod workspaces of the same GitHub repo must
+  // not collapse onto one `github:` project (the ORCA_STANDALONE semantic).
+  hostLocal: OptionalBoolean
 })
 
 export const ProjectHostSetupClone = z.object({

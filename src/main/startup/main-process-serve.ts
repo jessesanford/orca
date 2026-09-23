@@ -54,7 +54,9 @@ export async function printServeReady(options: ServeOptions): Promise<void> {
   const advertised = boundEndpoint
     ? resolveAdvertisedPairingEndpoint(boundEndpoint, options.pairingAddress)
     : null
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the ternary already narrows to the union's two literals; the assertion only names the union.
   const primaryScope = (options.mobilePairing ? 'mobile' : 'runtime') as 'mobile' | 'runtime'
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: complementary literal of primaryScope; same verified invariant.
   const secondaryScope = (options.mobilePairing ? 'runtime' : 'mobile') as 'mobile' | 'runtime'
   const pairing = options.noPairing
     ? ({
