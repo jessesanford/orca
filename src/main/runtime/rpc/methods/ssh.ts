@@ -5,6 +5,7 @@ import {
   listRegisteredRemovedSshTargetLabels,
   listRegisteredSshTargets
 } from '../../../ssh/ssh-target-registry'
+import { removeRegisteredSshTarget } from '../../../ipc/ssh-session-teardown'
 import { rotateSshProviderAuthority } from '../../../ssh/ssh-provider-authority'
 import { defineMethod } from '../core'
 import { getPublicSshError, getPublicSshState } from '../../public-ssh-state'
@@ -85,6 +86,17 @@ export const SSH_METHODS = [
         rotateSshProviderAuthority(targetId)
       }
       return { targets, repoReadoptions }
+    }
+  }),
+  defineMethod({
+    name: 'ssh.removeTarget',
+    params: SshTarget,
+    // Why: de-registration needs the same teardown the IPC path performs —
+    // transport dispose, lease cleanup, and browser-partition release — not a
+    // bare store row delete.
+    handler: async (params) => {
+      await removeRegisteredSshTarget(params.targetId)
+      return { removed: true }
     }
   })
 ]
