@@ -10,6 +10,7 @@ const {
   getSshTargetRegistryStoreMock,
   listRegisteredSshTargetsMock,
   listRegisteredRemovedSshTargetLabelsMock,
+  removeRegisteredSshTargetMock,
   rotateSshProviderAuthorityMock
 } = vi.hoisted(() => ({
   connectRegisteredSshTargetMock: vi.fn(),
@@ -17,6 +18,7 @@ const {
   getSshTargetRegistryStoreMock: vi.fn(),
   listRegisteredSshTargetsMock: vi.fn(),
   listRegisteredRemovedSshTargetLabelsMock: vi.fn(),
+  removeRegisteredSshTargetMock: vi.fn(),
   rotateSshProviderAuthorityMock: vi.fn()
 }))
 
@@ -26,6 +28,10 @@ vi.mock('../../../ssh/ssh-target-registry', () => ({
   getSshTargetRegistryStore: getSshTargetRegistryStoreMock,
   listRegisteredSshTargets: listRegisteredSshTargetsMock,
   listRegisteredRemovedSshTargetLabels: listRegisteredRemovedSshTargetLabelsMock
+}))
+
+vi.mock('../../../ipc/ssh-session-teardown', () => ({
+  removeRegisteredSshTarget: removeRegisteredSshTargetMock
 }))
 
 vi.mock('../../../ssh/ssh-provider-authority', () => ({
@@ -268,5 +274,18 @@ describe('ssh RPC methods', () => {
       ok: false,
       error: { message: 'ssh_target_registry_unavailable' }
     })
+  })
+
+  it('removes a target through the registered teardown path', async () => {
+    removeRegisteredSshTargetMock.mockResolvedValueOnce(undefined)
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('ssh.removeTarget', { targetId: 'ssh-1' })
+    )
+
+    expect(removeRegisteredSshTargetMock).toHaveBeenCalledWith('ssh-1')
+    expect(response).toMatchObject({ ok: true, result: { removed: true } })
   })
 })

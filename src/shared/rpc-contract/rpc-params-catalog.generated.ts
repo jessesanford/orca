@@ -1092,6 +1092,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'ssh.listRemovedTargetLabels': null,
   'ssh.listTargetSummaries': null,
   'ssh.listTargets': null,
+  'ssh.removeTarget': SshTarget,
   'stats.summary': null,
   'status.get': null,
   'terminal.adoptOrphans': TerminalAdoptOrphans,
