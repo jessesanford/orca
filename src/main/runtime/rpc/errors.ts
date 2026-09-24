@@ -84,6 +84,7 @@ const RUNTIME_PASSTHROUGH_CODES: ReadonlySet<string> = new Set([
   'timeout',
   'invalid_limit',
   'request_aborted',
+  'ssh_target_protected',
   'remote_update_manual_required',
   'remote_update_not_available',
   'remote_update_not_downloaded',

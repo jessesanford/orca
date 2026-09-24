@@ -62,6 +62,18 @@ describe('ssh RPC methods', () => {
     expect(response).toMatchObject({ ok: true, result: { state } })
   })
 
+  it('refuses to connect runtime-owned target ids', async () => {
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('ssh.connect', { targetId: 'runtime-ssh-abc123' })
+    )
+
+    expect(connectRegisteredSshTargetMock).not.toHaveBeenCalledWith('runtime-ssh-abc123')
+    expect(response).toMatchObject({ ok: false, error: { message: 'ssh_target_protected' } })
+  })
+
   it('returns null when the target has no registered state yet', async () => {
     getRegisteredSshStateMock.mockReturnValueOnce(undefined)
     const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService

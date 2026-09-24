@@ -23,6 +23,7 @@ vi.mock('../ssh/ssh-port-forward', () => mocks.sshPortForward)
 vi.mock('../ssh/ssh-port-scanner', () => mocks.sshPortScanner)
 
 import { registerSshHandlers } from './ssh'
+import { connectTarget } from './ssh-connect-flow'
 import type { SshConnectionState, SshTarget } from '../../shared/ssh-types'
 import type { SshPtyDataCallback } from '../providers/ssh-pty-provider-contract'
 import { createSshIpcHarness } from './ssh-ipc-test-harness'
@@ -165,7 +166,9 @@ describe('SSH IPC handlers', () => {
       reconnectAttempt: 0
     })
 
-    await handlers.get('ssh:connect')!(null, { targetId: 'runtime-ssh-1' })
+    // Runtime-owned targets are fenced from the ssh:connect IPC — the owning
+    // runtime dials through connectTarget, which is what this call models.
+    await connectTarget('runtime-ssh-1')
 
     expect(mockWindow.webContents.send).not.toHaveBeenCalledWith(
       'ssh:state-changed',
@@ -173,6 +176,31 @@ describe('SSH IPC handlers', () => {
     )
     expect(runtime.invalidateSshWorktreeScanCache).toHaveBeenCalledWith('runtime-ssh-1')
     expect(runtime.notifySshStateChanged).not.toHaveBeenCalled()
+  })
+
+  it('refuses client dials of runtime-owned SSH targets', async () => {
+    const runtime = {
+      invalidateSshWorktreeScanCache: vi.fn(),
+      notifySshStateChanged: vi.fn()
+    }
+    registerSshHandlers(mockStore as never, () => mockWindow as never, runtime as never)
+
+    await expect(
+      handlers.get('ssh:connect')!(null, { targetId: 'runtime-ssh-1' })
+    ).rejects.toThrow('ssh_target_protected')
+    await expect(
+      handlers.get('ssh:disconnect')!(null, { targetId: 'runtime-ssh-1' })
+    ).rejects.toThrow('ssh_target_protected')
+    await expect(
+      handlers.get('ssh:terminateSessions')!(null, { targetId: 'runtime-ssh-1' })
+    ).rejects.toThrow('ssh_target_protected')
+    expect(() =>
+      handlers.get('ssh:resetRelay')!(null, { targetId: 'runtime-ssh-1' })
+    ).toThrow('ssh_target_protected')
+    await expect(
+      handlers.get('ssh:testConnection')!(null, { targetId: 'runtime-ssh-1' })
+    ).rejects.toThrow('ssh_target_protected')
+    expect(mockConnectionManager.connect).not.toHaveBeenCalled()
   })
 
   it('invalidates runtime scans from hidden SSH state broadcasts', () => {

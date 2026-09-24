@@ -119,10 +119,16 @@ export function registerSshConnectionHandlers(): void {
   })
 
   ipcMain.handle('ssh:disconnect', async (_event, args: { targetId: string }) => {
+    if (isRuntimeOwnedSshTargetId(args.targetId)) {
+      throw new Error('ssh_target_protected')
+    }
     await disconnectRegisteredSshTarget(args.targetId)
   })
 
   ipcMain.handle('ssh:terminateSessions', async (_event, args: { targetId: string }) => {
+    if (isRuntimeOwnedSshTargetId(args.targetId)) {
+      throw new Error('ssh_target_protected')
+    }
     invalidateConnectAttempt(args.targetId)
     // Why (#12661): an offline sweep tears down local transport only. The caller must be able to tell
     // "the host stopped these" from "nobody asked the host", so carry the verdict out of the lifecycle queue.
@@ -203,6 +209,9 @@ export function registerSshConnectionHandlers(): void {
   })
 
   ipcMain.handle('ssh:resetRelay', (_event, args: { targetId: string }) => {
+    if (isRuntimeOwnedSshTargetId(args.targetId)) {
+      throw new Error('ssh_target_protected')
+    }
     const existingReset = resetRelayInFlight.get(args.targetId)
     if (existingReset) {
       return existingReset
@@ -242,6 +251,9 @@ export function registerSshConnectionHandlers(): void {
   })
 
   ipcMain.handle('ssh:testConnection', async (_event, args: { targetId: string }) => {
+    if (isRuntimeOwnedSshTargetId(args.targetId)) {
+      throw new Error('ssh_target_protected')
+    }
     const target = getSshTargetRegistryStore()!.getTarget(args.targetId)
     if (!target) {
       throw new Error(`SSH target "${args.targetId}" not found`)

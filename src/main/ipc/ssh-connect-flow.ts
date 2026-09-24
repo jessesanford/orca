@@ -205,7 +205,14 @@ async function doConnect(
     if (credentialWasRequested) {
       // Why: a credential-requested failure means this target needs interactive auth —
       // remember so headless auto-connect skips it instead of redialing on every create.
-      getSshTargetRegistryStore()!.updateTarget(targetId, { lastRequiredPassphrase: true })
+      // Unguarded would let a store throw mask the real connect error and skip teardown.
+      try {
+        getSshTargetRegistryStore()?.updateTarget(targetId, { lastRequiredPassphrase: true })
+      } catch (storeError) {
+        console.warn(
+          `[ssh] Failed to persist lastRequiredPassphrase for ${JSON.stringify(targetId)}: ${storeError instanceof Error ? storeError.message : String(storeError)}`
+        )
+      }
     }
     await abandonFailedSshSession(targetId, session)
     clearRelayLostBackoff(targetId)
