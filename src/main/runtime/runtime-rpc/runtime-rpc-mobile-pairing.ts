@@ -90,17 +90,9 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     const switchingPendingMode =
       pending != null &&
       this.deviceRegistry?.getMobilePairingConnectionMode(pending.deviceId) !== connectionMode
-    if (args.rotate || switchingPendingMode) {
-      if (pending?.relayBinding) {
-        // Why: record the durable cloud revoke before rotating the local token so an old relay invite can't outlive the QR.
-        if (!this.queueRelayDeviceRevoke(pending.relayBinding)) {
-          return pairingUnavailable(
-            'device_registry_unavailable',
-            'Could not persist Relay cleanup before rotating the pairing code.'
-          )
-        }
-      }
-    }
+    // Why: the relay-binding revoke lives inside createPairingOffer's rotate
+    // branch so every mint path (serve secondary offers, the operator RPC) is
+    // covered, not just this QR flow.
     const direct = this.createPairingOffer({
       ...args,
       rotate: args.rotate || switchingPendingMode,

@@ -84,6 +84,7 @@ export function serveOrcaApp(
     pairingAddress?: string | null
     noPairing?: boolean
     mobilePairing?: boolean
+    pairingAllScopes?: boolean
     recipeJson?: boolean
     projectRoot?: string | null
   } = {}
@@ -105,6 +106,9 @@ export function serveOrcaApp(
   }
   if (args.mobilePairing) {
     childArgs.push('--serve-mobile-pairing')
+  }
+  if (args.pairingAllScopes) {
+    childArgs.push('--serve-pairing-all-scopes')
   }
   if (args.recipeJson) {
     if (!args.projectRoot) {

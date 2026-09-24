@@ -3,6 +3,7 @@ import { levenshtein } from './edit-distance'
 export type ServeOptionValidationInput = {
   noPairing: boolean
   mobilePairing: boolean
+  pairingAllScopes: boolean
   recipeJson: boolean
   projectRoot: string | null | undefined
 }
@@ -17,6 +18,11 @@ export function getServeOptionValidationError(options: ServeOptionValidationInpu
   if (options.recipeJson && options.mobilePairing) {
     return 'Recipe JSON output requires runtime pairing; remove --mobile-pairing.'
   }
+  if (options.recipeJson && options.pairingAllScopes) {
+    // Why: the secondary credential could never be conveyed — minting it would
+    // leave an unseen standing credential in the device registry.
+    return 'Recipe JSON output carries only the primary pairing code; remove --pairing-all-scopes.'
+  }
   if (options.recipeJson && !options.projectRoot) {
     return 'Recipe JSON output requires --project-root.'
   }
@@ -28,6 +34,8 @@ const SERVE_SECURITY_FLAG_NAMES = [
   '--serve-no-pairing',
   '--mobile-pairing',
   '--serve-mobile-pairing',
+  '--pairing-all-scopes',
+  '--serve-pairing-all-scopes',
   '--recipe-json',
   '--serve-recipe-json',
   '--pairing-address',

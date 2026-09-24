@@ -68,6 +68,7 @@ describe('orca cli worktree awareness', () => {
       pairingAddress: '100.64.1.20',
       noPairing: true,
       mobilePairing: false,
+      pairingAllScopes: false,
       recipeJson: false,
       projectRoot: null
     })
@@ -87,6 +88,7 @@ describe('orca cli worktree awareness', () => {
       pairingAddress: '100.64.1.20',
       noPairing: false,
       mobilePairing: true,
+      pairingAllScopes: false,
       recipeJson: false,
       projectRoot: null
     })
@@ -113,6 +115,7 @@ describe('orca cli worktree awareness', () => {
       pairingAddress: 'wss://sandbox.example.com',
       noPairing: false,
       mobilePairing: false,
+      pairingAllScopes: false,
       recipeJson: true,
       projectRoot: '/workspace/repo'
     })

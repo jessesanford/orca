@@ -14,15 +14,15 @@ import type {
 } from '../../../shared/mobile-relay-credential-contract'
 import type { RuntimePairingReach } from '../../../shared/runtime-pairing-reach'
 import { resolveAdvertisedPairingEndpoint } from '../pairing-endpoint'
-import { renderTerminalPairingQr } from '../pairing-qr'
+import { RuntimeRpcLocalPairingOffer } from './runtime-rpc-local-pairing-offer'
 import { RuntimeRpcNetworkExposure } from './runtime-rpc-network-exposure'
 import {
   createWebClientUrl,
   DEVICE_REGISTRY_UNAVAILABLE_GUIDANCE,
   E2EE_KEY_UNAVAILABLE_GUIDANCE,
   pairingUnavailable,
-  type MobileRelayPairingProvider,
-  type PairingOfferUnavailable
+  type DirectPairingOffer,
+  type MobileRelayPairingProvider
 } from './runtime-rpc-pairing-types'
 
 export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
@@ -127,35 +127,18 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
     return ws?.endpoint ?? null
   }
 
+  private localPairingOfferMinter: RuntimeRpcLocalPairingOffer | null = null
+
   // Why: unix-socket operator path (headless brokers). Unlike the startup
   // readiness offers this is minted on demand — no serve restart, so a pairing
   // flow never bounces connected SSH targets. Implements the optional hook
-  // declared on RuntimeRpcRequestAdmission.
-  protected async createLocalPairingOffer(
+  // declared on RuntimeRpcRequestAdmission; the mint discipline itself lives in
+  // RuntimeRpcLocalPairingOffer (reach derivation, dedup, relay-safe rotation).
+  protected createLocalPairingOffer(
     params: PairingCreateOfferParams
   ): Promise<PairingCreateOfferResult> {
-    const scope = params.scope ?? 'runtime'
-    const offer = this.createPairingOffer({
-      address: params.address,
-      name: params.name ?? `Operator ${new Date().toLocaleDateString()}`,
-      rotate: params.rotate,
-      scope,
-      // Why: operator-minted offers are always meant for clients on the
-      // network path; 'this-computer' would strand the paired device.
-      reach: 'network'
-    })
-    if (!offer.available) {
-      return { available: false, reason: offer.reason, guidance: offer.guidance }
-    }
-    return {
-      available: true,
-      pairingUrl: offer.pairingUrl,
-      endpoint: offer.endpoint,
-      deviceId: offer.deviceId,
-      webClientUrl: offer.webClientUrl,
-      scope,
-      qr: scope === 'mobile' ? await renderTerminalPairingQr(offer.pairingUrl) : null
-    }
+    this.localPairingOfferMinter ??= new RuntimeRpcLocalPairingOffer(this)
+    return this.localPairingOfferMinter.createOffer(params)
   }
 
   createPairingOffer(args: {
@@ -166,15 +149,7 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
     // Why: STA-2370 — recorded on the grant so a "This computer only" client reconnecting cannot make the
     // next launch bind every interface. Defaults to network reach, which is what every other caller means.
     reach?: RuntimePairingReach
-  }):
-    | PairingOfferUnavailable
-    | {
-        available: true
-        pairingUrl: string
-        endpoint: string
-        deviceId: string
-        webClientUrl: string | null
-      } {
+  }): DirectPairingOffer {
     if (this.pairingInitializationFailure) {
       return this.pairingInitializationFailure
     }
@@ -200,6 +175,19 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
     const endpoint = advertised.endpoint
     const deviceName = args.name ?? `CLI ${new Date().toLocaleDateString()}`
     const scope = args.scope ?? 'runtime'
+    // Why: record the durable cloud revoke before rotating the local token so
+    // an old relay invite can't outlive the offer that replaces it. Lives in
+    // the choke point so every rotate path (IPC, serve secondary, operator
+    // RPC) is covered, not just the mobile QR flow.
+    if (scope === 'mobile' && args.rotate) {
+      const pending = this.deviceRegistry.getPendingDevice('mobile')
+      if (pending?.relayBinding && !this.queueRelayDeviceRevoke(pending.relayBinding)) {
+        return pairingUnavailable(
+          'device_registry_unavailable',
+          'Could not persist Relay cleanup before rotating the pairing code.'
+        )
+      }
+    }
     let device: DeviceEntry
     try {
       const reach = args.reach ?? 'network'

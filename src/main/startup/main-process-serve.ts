@@ -55,8 +55,13 @@ export async function printServeReady(options: ServeOptions): Promise<void> {
         name: `${options.mobilePairing ? 'Mobile' : 'CLI'} ${new Date().toLocaleDateString()}`,
         scope: primaryScope
       })
+  // Why: a second standing bearer credential is opt-in only — an operator who
+  // asked for one scope must not silently mint the other (the runtime-scope
+  // credential is strictly more powerful than a mobile one). Never minted in
+  // recipe-json mode: the URL has no channel to reach anyone, so the credential
+  // would persist unseen in the device registry.
   const secondaryPairing =
-    pairing.available && !options.noPairing
+    options.pairingAllScopes && !options.recipeJson && pairing.available
       ? runtimeRpc.createPairingOffer({
           address: options.pairingAddress,
           name: `${options.mobilePairing ? 'CLI' : 'Mobile'} ${new Date().toLocaleDateString()}`,
@@ -85,16 +90,28 @@ export async function printServeReady(options: ServeOptions): Promise<void> {
             scope: primaryScope,
             qr: pairingQr
           }
-        : pairing
+        : pairing,
+      // Why: the second credential travels inside the readiness envelope —
+      // a raw console.log line corrupts --json output and escapes the audit trail.
+      ...(secondaryPairing
+        ? {
+            secondaryPairing: secondaryPairing.available
+              ? {
+                  available: true,
+                  url: secondaryPairing.pairingUrl,
+                  endpoint: secondaryPairing.endpoint,
+                  deviceId: secondaryPairing.deviceId,
+                  webClientUrl: secondaryPairing.webClientUrl,
+                  scope: secondaryScope,
+                  qr: null
+                }
+              : secondaryPairing
+          }
+        : {})
     },
     options.recipeJson
       ? { mode: 'recipe-json', projectRoot: options.projectRoot! }
       : { mode: options.json ? 'json' : 'human' }
   )
-  if (secondaryPairing?.available) {
-    console.log(
-      `${secondaryScope === 'mobile' ? 'Mobile' : 'Runtime'} pairing URL: ${secondaryPairing.pairingUrl}`
-    )
-  }
   notifyServeSupervisorReady(runtime.getRuntimeId())
 }

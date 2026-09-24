@@ -83,6 +83,7 @@ describe('pairing RPC methods', () => {
       deviceId: 'dev-1',
       webClientUrl: null,
       scope: 'mobile',
+      pendingAction: 'rotated',
       qr: 'QR-ART'
     })
 
@@ -108,6 +109,8 @@ describe('pairing RPC methods', () => {
     for (const bad of [
       { scope: 'satellite' },
       { name: '' },
+      { name: 'evil\ninjected' },
+      { name: 'evil\x1b[31meset' },
       { rotate: 'yes' },
       { unexpected: true }
     ]) {

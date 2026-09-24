@@ -34,7 +34,14 @@ export const PairingGetEndpointsParamsSchema = z
 export const PairingCreateOfferParamsSchema = z
   .object({
     scope: z.enum(['runtime', 'mobile']).optional(),
-    name: OpaqueIdSchema.optional(),
+    // Why: names render in device lists and log lines — control and format
+    // characters (newlines, ANSI, bidi) must not pass from a remote caller.
+    name: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[^\p{Cc}\p{Cf}]+$/u)
+      .optional(),
     rotate: z.boolean().optional(),
     // Why: omitted ⇒ loopback-only offer (wildcard binds are not
     // client-reachable). Accepts host, host:port, or ws(s)/http(s) URL —
@@ -109,6 +116,10 @@ export type PairingCreateOfferResult =
       deviceId: string
       webClientUrl: string | null
       scope: 'runtime' | 'mobile'
+      // Why: a re-issued pending credential is indistinguishable from a fresh
+      // one without this — callers must know whether an offer they were just
+      // handed is the same token already printed elsewhere.
+      pendingAction: 'created' | 'reused' | 'rotated'
       qr: string | null
     }
   | { available: false; reason: string; guidance: string }
