@@ -175,6 +175,9 @@ function toServeReadiness(payload: Record<string, unknown>): ServeReadiness {
         ? payload.managedWslCliReconciliation
         : 'settled',
     pairing: payload.pairing as ServeReadiness['pairing'],
+    ...(payload.secondaryPairing
+      ? { secondaryPairing: payload.secondaryPairing as ServeReadiness['secondaryPairing'] }
+      : {}),
     ...(payload.health ? { health: payload.health as ServeReadiness['health'] } : {})
   }
 }

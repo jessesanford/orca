@@ -6,7 +6,10 @@ import type {
 import type { RuntimePairingReach } from '../../../shared/runtime-pairing-reach'
 import { classifyRemotePairingHostname } from '../../../shared/remote-pairing-address'
 import { NETWORK_EXPOSURE_FAILED_GUIDANCE } from '../network-exposure-guidance'
-import { resolveAdvertisedPairingHostname } from '../pairing-endpoint'
+import {
+  resolveAdvertisedPairingEndpoint,
+  resolveAdvertisedPairingHostname
+} from '../pairing-endpoint'
 import { renderTerminalPairingQr } from '../pairing-qr'
 import { pairingUnavailable, type DirectPairingOffer } from './runtime-rpc-pairing-types'
 
@@ -15,6 +18,7 @@ import { pairingUnavailable, type DirectPairingOffer } from './runtime-rpc-pairi
 export type LocalPairingOfferServer = {
   ensureNetworkExposure(): Promise<void>
   getDeviceRegistry(): DeviceRegistry | null
+  getWebSocketEndpoint(): string | null
   createPairingOffer(args: {
     address?: string | null
     name?: string
@@ -76,6 +80,19 @@ export class RuntimeRpcLocalPairingOffer {
       advertisedHostname === null ||
       classifyRemotePairingHostname(advertisedHostname) === 'loopback'
     if (!thisComputerOnly) {
+      // Why: validate-then-widen — an unresolvable advertisement must fail here rather than
+      // move the listener off loopback and then return invalid_advertised_endpoint.
+      const bound = this.server.getWebSocketEndpoint()
+      if (!bound) {
+        return pairingUnavailable(
+          'websocket_unavailable',
+          'WebSocket pairing is unavailable. Inspect preceding runtime errors and choose an unused --port if the listener failed.'
+        )
+      }
+      const advertised = resolveAdvertisedPairingEndpoint(bound, params.address)
+      if (!advertised.ok) {
+        return pairingUnavailable(advertised.reason, advertised.guidance)
+      }
       try {
         await this.server.ensureNetworkExposure()
       } catch (error) {
