@@ -12,12 +12,35 @@ import { randomUUID } from 'node:crypto'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import { placeCreatedSessionTab } from '../../shared/session-tab-placement'
 import { getSshPtyProvider } from '../ipc/pty'
-import { connectRegisteredSshTarget } from '../ssh/ssh-target-registry'
+import {
+  connectRegisteredSshTarget,
+  getRegisteredSshState,
+  getSshConnectionManager,
+  getSshTargetRegistryStore
+} from '../ssh/ssh-target-registry'
+import { isRuntimeOwnedSshTargetId } from '../../shared/execution-host'
+import { getPublicSshError } from './public-ssh-state'
 import {
   buildHeadlessMobileSessionTabGroups,
   buildMaterializedHeadlessParentLayout,
   getHeadlessMobileSessionGroupId
 } from './mobile-session-layout-projection'
+
+// Why: mirrors ssh:needsPassphrasePrompt — a headless host cannot surface a
+// passphrase dialog, so auto-dialing an interactive-credential target would only
+// produce instant-fail retries (the paired client can still ssh.connect after
+// fixing credentials). Runtime-owned targets are fenced: their connect lifecycle
+// belongs to the owning runtime, not to on-demand terminal mints.
+function shouldAutoConnectSshTarget(connectionId: string): boolean {
+  if (isRuntimeOwnedSshTargetId(connectionId)) {
+    return false
+  }
+  const target = getSshTargetRegistryStore()?.getTarget(connectionId)
+  if (!target?.lastRequiredPassphrase) {
+    return true
+  }
+  return !getSshConnectionManager()?.getConnection(connectionId)?.hasCachedCredential()
+}
 
 export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends OrcaRuntimeWithResolveMobileSessionTerminalCommand {
   protected async createRuntimeOwnedMobileSessionTerminal(
@@ -43,8 +66,20 @@ export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends Orca
     // Why: in headless serve mode there is no desktop renderer to proactively connect the SSH
     // target when the worktree opens. A mobile client creating a terminal expects the relay to be
     // established automatically, so we connect on demand before attempting to spawn the PTY.
-    if (workspace.connectionId && !getSshPtyProvider(workspace.connectionId)) {
-      await connectRegisteredSshTarget(workspace.connectionId)
+    const connectionId = workspace.connectionId
+    if (
+      connectionId &&
+      !getSshPtyProvider(connectionId) &&
+      shouldAutoConnectSshTarget(connectionId)
+    ) {
+      try {
+        await connectRegisteredSshTarget(connectionId)
+      } catch {
+        // Why: mirror ssh.connect — raw SSH/relay errors stay HUB-private;
+        // paired clients receive only the sanitized public state.
+        const state = getRegisteredSshState(connectionId)
+        throw new Error(getPublicSshError(state?.status ?? 'error'))
+      }
     }
     const cwd = this.resolveWorkspaceTerminalStartupCwd(workspace, opts.cwd)
     // Why: SshPtyProvider treats sessionId as a relay reattach; only synthesize local serve ids so SSH fresh terminals still call pty.spawn.
