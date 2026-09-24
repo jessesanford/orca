@@ -60,28 +60,46 @@ ordering requirement, and file-format coupling to the store internals.
 
 **Principle:** the `Host` alias is a name; a *self-identifying* `ProxyCommand` is the
 endpoint. "Self-identifying" means the argv carries a concrete target argument (workspace
-name, `--workdir`, instance id) so two aliases resolving to the same argv reach the same
-machine, account, and filesystem — e.g. `devpod ssh … --workdir /x`. For generic
-proxy-*through* commands (`ssh -W %h:%p jumphost`, `cloudflared access ssh --hostname %h`,
-`nc %h %p`, fdpass transports) the ProxyCommand only names a connector: two blocks with
-byte-identical argv can reach different machines, so the key must fold in the resolved
-`host|port|username` before it can claim endpoint identity.
+name, instance id) so two aliases resolving to the same argv reach the same machine,
+account, and filesystem — e.g. `devpod ssh --context default --user vscode sbx-ws-123`.
+For generic proxy-*through* commands (`ssh -W %h:%p jumphost`,
+`cloudflared access ssh --hostname %h`, `nc %h %p`, fdpass transports) the ProxyCommand only
+names a connector: two blocks with byte-identical argv can reach different machines, so the
+key must fold in the resolved `host|port|username` before it can claim endpoint identity.
+
+**Which argv tokens are identity, and which are mutable.** The key is built only from tokens
+that answer "which machine and account": the connector argv itself (`devpod ssh`), the
+provider context (`--context default`), the account (`--user vscode`), and the positional
+workspace/instance argument (`sbx-ws-123`). Tokens that answer "where do I land after
+connecting" are session attributes, not identity — `--workdir`, `--command`, and other
+landing-dir/entrypoint directives are *excluded* from the key so a recreate that moves the
+repo path still binds, and proposal 4 then heals the recorded path. The load-bearing
+assumption: the positional workspace argument is stable across a recreate (it *names* the
+workspace). If a tool regenerates the workspace argument itself, no argv-based identity can
+survive — that case under-merges to the status quo (orphans, same as today) and is the
+documented boundary of this design.
 
 ### Proposed changes
 
 1. **Extend `SshIdentityFields` with a proxy-endpoint key.** Add
    `sshProxyEndpointKey(target)`:
    - Self-identifying proxy argv → normalized argv tokens minus transport flags
-     (`--stdio`, `-o`, `-W`, port placeholders), so
+     (`--stdio`, `-o`, `-W`, port placeholders) *and* landing-dir directives
+     (`--workdir`, `--command`), so
      `devpod ssh --context default --user vscode sbx-ws-123 --workdir /x` keys on
-     `devpod ssh|vscode|sbx-ws-123|/x`.
+     `devpod ssh|default|vscode|sbx-ws-123` — unchanged when the workspace is recreated at a
+     new workdir.
    - Generic transport proxy → `proxyTransport|resolved host|port|username|identityFile`,
      so the key can never collide two blocks that only share a connector.
    - Only key on ProxyCommands that parse to a clean argv: `sh -c`, `env VAR=…` prefixes,
      and nontrivial quoting make "tokenization" fragile — treat unparseable snippets as
      having no proxy key (never rebind on them).
-   For non-proxy targets the key is the existing
-   `sshEndpointKey` (`host|port|username`).
+   Non-proxy targets carry **no** `sshProxyEndpointKey` — this is deliberate. Their
+   `sshEndpointKey` (`host|port|username`) already exists and, per `tombstoneMatches`,
+   matching it across two different real aliases must stay a non-match ("deliberately
+   distinct targets"). Giving non-proxy rows a proxy key would silently re-adopt
+   `prod`/`prod-admin` pairs that share `host|port|username` but differ in `IdentityFile`
+   or other directives — exactly what the current code refuses.
 2. **Import reconciles by endpoint identity, not just alias.** In
    `importFromSshConfig`, when a config host's alias matches no existing target, check
    `sshProxyEndpointKey` against existing `ssh-config`-sourced targets *before* inserting:
@@ -93,22 +111,38 @@ byte-identical argv can reach different machines, so the key must fold in the re
      exactly one unambiguous candidate exists (mirror the ambiguity rules in
      `tombstoneMatches`: a row carrying a different *real* alias is a deliberate distinct
      target unless the endpoint key also matches).
-3. **`tombstoneMatches` falls back to the proxy key.** When a tombstoned target and a new
-   target share `sshProxyEndpointKey`, re-adopt even across an alias change — same guarantee
-   the alias/tuple match gives today, extended to renamed workspaces.
+   - Multiple *incoming* config hosts can also share one endpoint key (a stale devpod `Host`
+     block left beside the new one). Track `processedEndpointKeys` for the pass and let the
+     first config host in file order win the bind; later duplicates take the plain insert
+     path. Without this, last-wins rebinding flips `configHost` every sync and violates the
+     "repeat sync is a no-op" requirement.
+3. **`tombstoneMatches` falls back to the proxy key — for proxy targets only.** When a
+   tombstoned target and a new target share a real `sshProxyEndpointKey`, re-adopt even
+   across an alias change — same guarantee the alias/tuple match gives today, extended to
+   renamed workspaces. This fallback never applies to non-proxy targets: two different real
+   aliases sharing `host|port|username` remain deliberately distinct, as today.
+   `buildRemovedSshTargetTombstone` (`ssh-target-readoption.ts:84-97`) persists no proxy
+   fields, so the tombstone schema must grow an optional `proxyEndpointKey` (computed at
+   removal time) — additive, ignored by old readers, absent ⇒ no proxy fallback.
 4. **Repo path follows the endpoint's declared root.** When `ProxyCommand` carries
    `--workdir` (or an equivalent landing-dir directive), a bound repo whose path no longer
    resolves can be re-pointed to it. Keep this opt-in/narrow: only for `ssh-config` targets,
-   only when the recorded path fails an existence probe on the remote, and never for repos the
-   user moved deliberately (`source === 'manual'` repos untouched).
+   only when the recorded path fails an existence probe on the remote, and only for repos
+   whose recorded path sits under the *previous* declared root — `Repo` has no provenance
+   field (`source` lives on `SshTarget`, not `Repo`), so "the user moved this repo
+   deliberately" is inferred from "the recorded path is outside the endpoint's landing
+   root," which that containment check expresses directly.
 
 ### Non-negotiable requirements
 
 - **Never merge distinct endpoints.** Two different ProxyCommand argv (different workspace arg,
   user, or command) are different machines even under one alias — and two *identical* generic
   transport proxies are still distinct endpoints until `host|port|username` agree. In-place
-  rebind additionally requires the candidate's non-proxy directives to agree, so a colliding
-  alias can't redirect an existing target's repos/automations onto a different real host.
+  rebind additionally requires the candidate's identity-bearing directives to agree —
+  `HostName` (when present), `Port`, `User`, `IdentityFile`. The `host` field itself is
+  excluded from that comparison: for no-`HostName` proxy targets it echoes the alias, which
+  is the value that changed. A colliding alias must never redirect an existing target's
+  repos/automations onto a different real host.
 - **`source: 'manual'` rows untouched**, same as today (`ssh-connection-store.ts:153-159`).
 - **Tombstoned aliases stay suppressed** unless explicitly re-added (`reclaimAlias`,
   `:111-123`); endpoint matching must not resurrect them via the back door.
