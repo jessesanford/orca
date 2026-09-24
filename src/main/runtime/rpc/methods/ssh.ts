@@ -6,6 +6,7 @@ import {
 } from '../../../ssh/ssh-target-registry'
 import { defineMethod } from '../core'
 import { getPublicSshError, getPublicSshState } from '../../public-ssh-state'
+import { isRuntimeOwnedSshTargetId } from '../../../../shared/execution-host'
 import type { SshTargetSummary } from '../../../../shared/ssh-types'
 import { SshTarget } from '../../../../shared/rpc-contract/ssh-params'
 
@@ -37,6 +38,11 @@ export const SSH_METHODS = [
     name: 'ssh.connect',
     params: SshTarget,
     handler: async (params) => {
+      // Why: runtime-owned targets are the owning runtime's transport — a paired client
+      // dialing one would detach the owner's session and churn its relay leases.
+      if (isRuntimeOwnedSshTargetId(params.targetId)) {
+        throw new Error('ssh_target_protected')
+      }
       try {
         return { state: getPublicSshState(await connectRegisteredSshTarget(params.targetId)) }
       } catch {

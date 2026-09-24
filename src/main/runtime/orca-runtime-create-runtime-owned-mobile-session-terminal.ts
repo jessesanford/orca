@@ -12,35 +12,14 @@ import { randomUUID } from 'node:crypto'
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import { placeCreatedSessionTab } from '../../shared/session-tab-placement'
 import { getSshPtyProvider } from '../ipc/pty'
-import {
-  connectRegisteredSshTarget,
-  getRegisteredSshState,
-  getSshConnectionManager,
-  getSshTargetRegistryStore
-} from '../ssh/ssh-target-registry'
-import { isRuntimeOwnedSshTargetId } from '../../shared/execution-host'
+import { connectRegisteredSshTarget, getRegisteredSshState } from '../ssh/ssh-target-registry'
 import { getPublicSshError } from './public-ssh-state'
+import { shouldAutoConnectSshTarget } from './ssh-auto-connect-gate'
 import {
   buildHeadlessMobileSessionTabGroups,
   buildMaterializedHeadlessParentLayout,
   getHeadlessMobileSessionGroupId
 } from './mobile-session-layout-projection'
-
-// Why: mirrors ssh:needsPassphrasePrompt — a headless host cannot surface a
-// passphrase dialog, so auto-dialing an interactive-credential target would only
-// produce instant-fail retries (the paired client can still ssh.connect after
-// fixing credentials). Runtime-owned targets are fenced: their connect lifecycle
-// belongs to the owning runtime, not to on-demand terminal mints.
-function shouldAutoConnectSshTarget(connectionId: string): boolean {
-  if (isRuntimeOwnedSshTargetId(connectionId)) {
-    return false
-  }
-  const target = getSshTargetRegistryStore()?.getTarget(connectionId)
-  if (!target?.lastRequiredPassphrase) {
-    return true
-  }
-  return !getSshConnectionManager()?.getConnection(connectionId)?.hasCachedCredential()
-}
 
 export class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends OrcaRuntimeWithResolveMobileSessionTerminalCommand {
   protected async createRuntimeOwnedMobileSessionTerminal(

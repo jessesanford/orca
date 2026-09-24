@@ -200,7 +200,13 @@ async function doConnect(
       throw createCancelledConnectAttemptError()
     }
     // Why: clear this failed connect's flag so a later non-prompting connect isn't deferred.
+    const credentialWasRequested = credentialRequestedForTarget.has(targetId)
     credentialRequestedForTarget.delete(targetId)
+    if (credentialWasRequested) {
+      // Why: a credential-requested failure means this target needs interactive auth —
+      // remember so headless auto-connect skips it instead of redialing on every create.
+      getSshTargetRegistryStore()!.updateTarget(targetId, { lastRequiredPassphrase: true })
+    }
     await abandonFailedSshSession(targetId, session)
     clearRelayLostBackoff(targetId)
     clearRelayStateOverride(targetId)

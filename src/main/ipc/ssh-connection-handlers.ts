@@ -7,6 +7,7 @@ import {
 import { SSH_TERMINATE_RECONNECT_REQUIRED } from '../../shared/constants'
 import { isSshPtyNotFoundError } from '../providers/ssh-pty-errors'
 import { toAppSshPtyId, toRelaySshPtyId } from '../providers/ssh-pty-id'
+import { isRuntimeOwnedSshTargetId } from '../../shared/execution-host'
 import { rotateSshProviderAuthority } from '../ssh/ssh-provider-authority'
 import { forceStopRelayForTarget } from '../ssh/ssh-relay-reset'
 import { setSshTargetRegistryHandlers, getSshTargetRegistryStore } from '../ssh/ssh-target-registry'
@@ -109,6 +110,11 @@ export function registerSshConnectionHandlers(): void {
   })
 
   ipcMain.handle('ssh:connect', async (_event, args: { targetId: string }) => {
+    // Why: runtime-owned targets are fenced from client dials — connectTarget itself stays
+    // open because the owning ephemeral runtime connects through it.
+    if (isRuntimeOwnedSshTargetId(args.targetId)) {
+      throw new Error('ssh_target_protected')
+    }
     return connectTarget(args.targetId)
   })
 
