@@ -5,6 +5,7 @@ import {
 } from '../../../shared/mobile-relay-mint-failure'
 import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../../shared/pairing'
 import { NETWORK_EXPOSURE_FAILED_GUIDANCE } from '../network-exposure-guidance'
+import { resolveAdvertisedPairingEndpoint } from '../pairing-endpoint'
 import { RuntimeRpcPairing } from './runtime-rpc-pairing'
 import {
   DEVICE_REGISTRY_UNAVAILABLE_GUIDANCE,
@@ -21,6 +22,21 @@ export class RuntimeRpcMobilePairing extends RuntimeRpcPairing {
     name?: string
     rotate?: boolean
   }): Promise<MobilePairingOffer> {
+    // Why: an explicit address that can't resolve must fail before the listener widens —
+    // widening on a doomed request leaves an unnecessary off-loopback bind behind.
+    if (args.address != null) {
+      const bound = this.getWebSocketEndpoint()
+      if (!bound) {
+        return pairingUnavailable(
+          'websocket_unavailable',
+          'WebSocket pairing is unavailable. Inspect preceding runtime errors and choose an unused --port if the listener failed.'
+        )
+      }
+      const advertised = resolveAdvertisedPairingEndpoint(bound, args.address)
+      if (!advertised.ok) {
+        return pairingUnavailable(advertised.reason, advertised.guidance)
+      }
+    }
     // Why: STA-2370 — creating a mobile pairing offer is the user's explicit opt-in to LAN reach, so
     // widen the loopback listener before advertising its LAN endpoint in the QR. If the widen fails the
     // listener stays on loopback, so report unavailable rather than advertise a dead LAN endpoint.

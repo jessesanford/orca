@@ -131,11 +131,12 @@ export class RuntimeRpcLocalPairingOffer {
       deviceId: offer.deviceId,
       webClientUrl: offer.webClientUrl,
       scope,
-      pendingAction: params.rotate
-        ? 'rotated'
-        : pendingBefore && pendingBefore.deviceId === offer.deviceId
-          ? 'reused'
-          : 'created',
+      pendingAction:
+        params.rotate && pendingBefore
+          ? 'rotated'
+          : pendingBefore && pendingBefore.deviceId === offer.deviceId
+            ? 'reused'
+            : 'created',
       qr: scope === 'mobile' ? await renderTerminalPairingQr(offer.pairingUrl) : null
     }
   }
