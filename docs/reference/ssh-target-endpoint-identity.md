@@ -93,7 +93,12 @@ documented boundary of this design.
      so the key can never collide two blocks that only share a connector.
    - Only key on ProxyCommands that parse to a clean argv: `sh -c`, `env VAR=…` prefixes,
      and nontrivial quoting make "tokenization" fragile — treat unparseable snippets as
-     having no proxy key (never rebind on them).
+     having no proxy key (never rebind on them). argv still carrying unexpanded `%h`/`%p`/`%r`
+     tokens is not self-identifying either — `connect %h` on two different HostNames keys
+     identically but reaches different machines — so %-bearing argv takes the generic
+     transport shape (or is token-substituted against the resolved block first).
+   - A block that also sets `ProxyJump` is excluded entirely: OpenSSH lets `ProxyJump`
+     override `ProxyCommand`, so the stored argv may not be the transport at all.
    Non-proxy targets carry **no** `sshProxyEndpointKey` — this is deliberate. Their
    `sshEndpointKey` (`host|port|username`) already exists and, per `tombstoneMatches`,
    matching it across two different real aliases must stay a non-match ("deliberately
@@ -131,7 +136,9 @@ documented boundary of this design.
    whose recorded path sits under the *previous* declared root — `Repo` has no provenance
    field (`source` lives on `SshTarget`, not `Repo`), so "the user moved this repo
    deliberately" is inferred from "the recorded path is outside the endpoint's landing
-   root," which that containment check expresses directly.
+   root," which that containment check expresses directly. Scoped to proposal-2 in-place
+   rebinds: a tombstone re-adoption has no previous declared root to compare against
+   (persisting it would need a second tombstone field), so that path leaves paths alone.
 
 ### Non-negotiable requirements
 
