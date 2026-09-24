@@ -107,6 +107,11 @@ export class RuntimeProjectHostSetupController {
     // already registers `ssh:*` hosts correctly. Refusing here only made the CLI and runtime RPC
     // disagree with the desktop app about what the same process can do.
     const sshTargetId = getSshTargetIdForExecutionHost(args.hostId)
+    // Why fail closed: hostLocal suppresses provider-identity enrichment. Dropping it silently
+    // on a non-SSH host would let the repo re-key into a shared provider project later.
+    if (args.hostLocal && !sshTargetId) {
+      throw new Error('host_local_requires_ssh_host')
+    }
     const repo = sshTargetId
       ? await this.deps.addRemoteRepo({
           connectionId: sshTargetId,

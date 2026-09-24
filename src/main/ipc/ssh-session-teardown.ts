@@ -8,6 +8,9 @@ import { clearRelayLostBackoff } from './ssh-relay-lost-backoff'
 import { clearRelayStateOverride } from './ssh-renderer-broadcast'
 import { runTargetLifecycle } from './ssh-target-lifecycle-queue'
 
+// Why: targetId reaches logs from remote RPC callers — keep log lines single-line and forged-line-proof.
+const safeTargetId = (targetId: string): string => JSON.stringify(targetId)
+
 export async function disconnectRegisteredSshTarget(targetId: string): Promise<void> {
   invalidateConnectAttempt(targetId)
   await runTargetLifecycle(targetId, () =>
@@ -28,7 +31,7 @@ export async function removeRegisteredSshTarget(targetId: string): Promise<void>
     } catch (err) {
       // Why: a failed disconnect must not block metadata removal, else the target lingers in the store with uncleaned leases.
       console.warn(
-        `[ssh] Failed to disconnect removed target ${targetId}: ${err instanceof Error ? err.message : String(err)}`
+        `[ssh] Failed to disconnect removed target ${safeTargetId(targetId)}: ${err instanceof Error ? err.message : String(err)}`
       )
     }
     persistedStore?.removeSshRemotePtyLeases(targetId)
@@ -50,7 +53,7 @@ export async function removeRegisteredSshTarget(targetId: string): Promise<void>
       await storage.clearBrowserRoutePartitionStorageForLocalSshTarget(targetId)
     } catch (error) {
       console.warn(
-        `[ssh] Failed to clear browser partitions for removed target ${targetId}: ${error instanceof Error ? error.message : String(error)}`
+        `[ssh] Failed to clear browser partitions for removed target ${safeTargetId(targetId)}: ${error instanceof Error ? error.message : String(error)}`
       )
     }
   })
@@ -131,7 +134,7 @@ export async function abandonFailedSshSession(
   } catch (error) {
     // Why: a teardown throw must not mask the connect error the caller is about to rethrow.
     console.warn(
-      `[ssh] Failed to detach abandoned session for ${targetId}: ${error instanceof Error ? error.message : String(error)}`
+      `[ssh] Failed to detach abandoned session for ${safeTargetId(targetId)}: ${error instanceof Error ? error.message : String(error)}`
     )
   }
   if (activeSessions.get(targetId) === session) {
@@ -161,7 +164,7 @@ export async function abandonCancelledConnectAttempt(
   } catch (error) {
     // Why: the caller is about to throw the cancellation; a teardown throw must not replace it.
     console.warn(
-      `[ssh] Failed to disconnect cancelled connect transport for ${targetId}: ${error instanceof Error ? error.message : String(error)}`
+      `[ssh] Failed to disconnect cancelled connect transport for ${safeTargetId(targetId)}: ${error instanceof Error ? error.message : String(error)}`
     )
   }
 }

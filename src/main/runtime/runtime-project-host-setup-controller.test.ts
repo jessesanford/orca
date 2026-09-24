@@ -104,6 +104,38 @@ describe('RuntimeProjectHostSetupController host routing', () => {
     expect(addRemoteRepo).not.toHaveBeenCalled()
   })
 
+  it('rejects hostLocal on a non-SSH host instead of silently dropping it', async () => {
+    const { controller, addRepo, addRemoteRepo, projectId } = makeController()
+
+    await expect(
+      controller.setupExistingFolder({
+        projectId,
+        hostId: 'local',
+        path: REMOTE_PATH,
+        kind: 'git',
+        hostLocal: true
+      })
+    ).rejects.toThrow('host_local_requires_ssh_host')
+    expect(addRepo).not.toHaveBeenCalled()
+    expect(addRemoteRepo).not.toHaveBeenCalled()
+  })
+
+  it('forwards hostLocal to the SSH registration path', async () => {
+    const { controller, addRemoteRepo, projectId } = makeController()
+
+    await controller.setupExistingFolder({
+      projectId,
+      hostId: `ssh:${TARGET_ID}`,
+      path: REMOTE_PATH,
+      kind: 'git',
+      hostLocal: true
+    })
+
+    expect(addRemoteRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ connectionId: TARGET_ID, hostLocal: true })
+    )
+  })
+
   it('refuses to clone onto an SSH host, because nothing here clones remotely', async () => {
     const { controller, cloneRepo, projectId } = makeController()
 

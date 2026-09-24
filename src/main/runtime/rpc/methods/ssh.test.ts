@@ -225,7 +225,7 @@ describe('ssh RPC methods', () => {
     expect(response).toMatchObject({ ok: true, result: { labels } })
   })
 
-  it('imports ssh-config targets and drains repo readoptions with authority rotation', async () => {
+  it('imports ssh-config targets redacted, drains repo readoptions with authority rotation', async () => {
     const store = {
       importFromSshConfig: vi
         .fn()
@@ -233,11 +233,15 @@ describe('ssh RPC methods', () => {
           { id: 'ssh-2', label: 'sbx-demo.devpod', configHost: 'sbx-demo.devpod' }
         ]),
       lastRepoReadoptions: [
-        { oldTargetId: 'ssh-old', newTargetId: 'ssh-2', repoId: 'repo-1' },
-        { oldTargetId: 'ssh-old', newTargetId: 'ssh-2', repoId: 'repo-2' }
+        { oldTargetId: 'ssh-old', newTargetId: 'ssh-2', repoIds: ['repo-1'] },
+        { oldTargetId: 'ssh-old', newTargetId: 'ssh-2', repoIds: ['repo-2'] }
       ]
     }
     getSshTargetRegistryStoreMock.mockReturnValueOnce(store)
+    listRegisteredSshTargetsMock.mockReturnValueOnce([
+      { id: 'ssh-2', label: 'sbx-demo.devpod', configHost: 'sbx-demo.devpod' },
+      { id: 'ssh-9', label: 'other', configHost: 'other' }
+    ])
     const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
 
@@ -248,18 +252,42 @@ describe('ssh RPC methods', () => {
     expect(rotateSshProviderAuthorityMock).toHaveBeenCalledTimes(2)
     expect(rotateSshProviderAuthorityMock).toHaveBeenCalledWith('ssh-old')
     expect(rotateSshProviderAuthorityMock).toHaveBeenCalledWith('ssh-2')
+    // Why: the return must stay inside the HUB-private summary shape — imported
+    // row located by id/label, never host/proxy/credential detail.
     expect(response).toMatchObject({
       ok: true,
       result: {
-        targets: [{ id: 'ssh-2', configHost: 'sbx-demo.devpod' }],
-        repoReadoptions: [{ repoId: 'repo-1' }, { repoId: 'repo-2' }]
+        targets: [{ id: 'ssh-2', label: 'sbx-demo.devpod', connected: false }],
+        repoReadoptions: [{ repoIds: ['repo-1'] }, { repoIds: ['repo-2'] }]
       }
     })
+    expect(JSON.stringify(response)).not.toContain('configHost')
+  })
+
+  it('refuses ssh.importConfig and ssh.removeTarget from paired clients', async () => {
+    const store = { importFromSshConfig: vi.fn(), lastRepoReadoptions: [], getTarget: vi.fn() }
+    getSshTargetRegistryStoreMock.mockReturnValue(store)
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
+
+    for (const method of ['ssh.importConfig', 'ssh.removeTarget']) {
+      const response = await dispatcher.dispatch(
+        makeRequest(method, method === 'ssh.removeTarget' ? { targetId: 'ssh-1' } : {}),
+        { clientKind: 'runtime' }
+      )
+      expect(response).toMatchObject({
+        ok: false,
+        error: { message: 'ssh_target_management_requires_local_caller' }
+      })
+    }
+    expect(store.importFromSshConfig).not.toHaveBeenCalled()
+    expect(removeRegisteredSshTargetMock).not.toHaveBeenCalled()
   })
 
   it('defaults ssh.importConfig params and fails closed when the registry is absent', async () => {
     const store = { importFromSshConfig: vi.fn().mockReturnValue([]), lastRepoReadoptions: [] }
     getSshTargetRegistryStoreMock.mockReturnValueOnce(store)
+    listRegisteredSshTargetsMock.mockReturnValueOnce([])
     const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
 
@@ -277,6 +305,9 @@ describe('ssh RPC methods', () => {
   })
 
   it('removes a target through the registered teardown path', async () => {
+    getSshTargetRegistryStoreMock.mockReturnValueOnce({
+      getTarget: vi.fn().mockReturnValue({ id: 'ssh-1' })
+    })
     removeRegisteredSshTargetMock.mockResolvedValueOnce(undefined)
     const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
@@ -287,5 +318,28 @@ describe('ssh RPC methods', () => {
 
     expect(removeRegisteredSshTargetMock).toHaveBeenCalledWith('ssh-1')
     expect(response).toMatchObject({ ok: true, result: { removed: true } })
+  })
+
+  it('refuses ssh.removeTarget for runtime-owned and unknown targets', async () => {
+    removeRegisteredSshTargetMock.mockClear()
+    getSshTargetRegistryStoreMock.mockReturnValue({
+      getTarget: vi.fn().mockReturnValue(undefined)
+    })
+    const runtime = { getRuntimeId: () => 'test-runtime' } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: SSH_METHODS })
+
+    const runtimeOwned = await dispatcher.dispatch(
+      makeRequest('ssh.removeTarget', { targetId: 'runtime-ssh-abc123' })
+    )
+    expect(runtimeOwned).toMatchObject({
+      ok: false,
+      error: { message: 'ssh_target_protected' }
+    })
+
+    const unknown = await dispatcher.dispatch(
+      makeRequest('ssh.removeTarget', { targetId: 'ssh-missing' })
+    )
+    expect(unknown).toMatchObject({ ok: false, error: { message: 'ssh_target_not_found' } })
+    expect(removeRegisteredSshTargetMock).not.toHaveBeenCalled()
   })
 })

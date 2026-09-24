@@ -191,8 +191,10 @@ function selectEnrichmentCandidates(store: RepoIdentityStore): Repo[] {
   // Why: the settled `null` marker stays a candidate on purpose — a repo that
   // gains a remote later must still resolve. Do not tighten this to
   // `=== undefined`; the retry TTL already bounds the cost and `writeIdentity`
-  // skips the redundant rewrite.
-  const candidates = repos.filter((repo) => !repo.gitRemoteIdentity)
+  // skips the redundant rewrite. `hostLocal` repos are excluded outright —
+  // stamping a detected identity would re-key their `repo:` project onto a
+  // shared `github:`/`git:` one and collapse per-sandbox isolation.
+  const candidates = repos.filter((repo) => !repo.gitRemoteIdentity && !repo.hostLocal)
   // Why re-probe at all: an identity resolved once is otherwise frozen for the life of the repo
   // record, so a later `git remote add upstream` or a project rename/transfer keeps misjudging
   // identity gates against the path the repo had when it was added.

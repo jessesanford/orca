@@ -98,16 +98,21 @@ export function hasProjectRemoteIdentity(
  *  resolved `null` marker meaning "checked, no usable remote". Provider-neutral —
  *  GitHub repos usually settle through persisted `upstream` instead. */
 export function isProjectRemoteIdentityPending(
-  repo: Pick<Repo, 'upstream' | 'repoIcon' | 'gitRemoteIdentity'>
+  repo: Pick<Repo, 'upstream' | 'repoIcon' | 'gitRemoteIdentity' | 'hostLocal'>
 ): boolean {
-  return repo.gitRemoteIdentity === undefined && !hasProjectRemoteIdentity(repo)
+  return repo.gitRemoteIdentity === undefined && !repo.hostLocal && !hasProjectRemoteIdentity(repo)
 }
 
 const HOST_LOCAL_PROJECT_ID_PREFIX = 'repo:'
 
 export function getProjectIdentityKey(
-  repo: Pick<Repo, 'id' | 'upstream' | 'repoIcon' | 'gitRemoteIdentity'>
+  repo: Pick<Repo, 'id' | 'upstream' | 'repoIcon' | 'gitRemoteIdentity' | 'hostLocal'>
 ): string {
+  // Why: a host-local repo must stay `repo:`-scoped even if identity fields ever
+  // get stamped by another writer — this is the merge-key, so it fails closed.
+  if (repo.hostLocal) {
+    return `${HOST_LOCAL_PROJECT_ID_PREFIX}${repo.id}`
+  }
   const identity = getProjectProviderIdentity(repo)
   if (identity) {
     return getProjectIdForProviderIdentity(identity)

@@ -98,6 +98,7 @@ export async function addRemoteRepoFromPath(
     displayName,
     badgeColor: DEFAULT_REPO_BADGE_COLOR,
     ...detected,
+    ...(args.hostLocal ? { hostLocal: true } : {}),
     addedAt: Date.now(),
     kind: repoKind,
     connectionId: args.connectionId,
