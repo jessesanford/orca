@@ -158,6 +158,22 @@ export function parseRelayEndpointIncumbentProbe(
     .filter((holder): holder is RelayEndpointHolder => holder !== null)
 
   if (listen === 'accepted') {
+    if (holdersEnumerable && holders.length === 0) {
+      // Phantom accept: the connect succeeded but a complete holder enumeration found
+      // nobody. Shared-mount filesystems (virtiofs — the durable-home mount in devpods)
+      // report a dead socket inode as connectable, so `accepted` alone is not positive
+      // evidence of life. `unverifiable` keeps the claim honest while still permitting a
+      // launch — the daemon's own takeover probe (RelaySocketOwnership) re-checks the path
+      // atomically at bind time and refuses a genuinely answering listener.
+      return {
+        sockPath,
+        verdict: 'unverifiable',
+        evidence: 'inconclusive',
+        socketPresent,
+        holders,
+        holdersEnumerable
+      }
+    }
     return {
       sockPath,
       verdict: 'live',

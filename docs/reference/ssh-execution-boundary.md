@@ -62,6 +62,8 @@ A verdict needs evidence from the host that owns the process. Apply these tests 
 
 **Was the signal produced by the owning host, or by the client's own bookkeeping?** Absence from a client-side set, a lookup that threw, a socket that closed, a command that timed out — none of these observe the process. They are `unverifiable` by construction, whatever the field is named.
 
+The asymmetry cuts the other way too: a *successful* socket connect is not always positive evidence of `live`. On shared-mount filesystems (virtiofs — the durable-home mount in devpod-style remote homes), a dead relay's socket file can phantom-accept: `connect()` succeeds on the inode and the socket dies on first write. So the incumbent probe (`parseRelayEndpointIncumbentProbe` in `src/main/ssh/ssh-relay-endpoint-incumbent.ts`) treats `accepted` + a *complete* holder enumeration of zero as `unverifiable`, and `RelaySocketOwnership.probeBlockedPath` (`src/relay/relay-socket-ownership.ts`) resolves the ambiguity at bind time by writing a real handshake frame — a reply means a live listener answers, an I/O error (`EPIPE`/`ECONNRESET`) means the accept was phantom and the stale inode may be unlinked, and silence or a clean close stays `held`.
+
 **Did every remote PTY on that target go quiet at once?** A transport drop takes them all together. Simultaneous silence across a host indicates a lost link, not simultaneous death.
 
 **Does the termination event match the current identity?** A host-delivered exit for the live PTY incarnation and provider generation, while its siblings still report, establishes `exited`. A stale event, an event for a superseded incarnation, or one quiet terminal with no host evidence does not.

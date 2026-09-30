@@ -1,8 +1,15 @@
 import { existsSync, statSync, unlinkSync } from 'node:fs'
 import { createConnection, createServer, type Server, type Socket } from 'node:net'
+import { encodeHandshakeFrame, RELAY_VERSION } from './protocol'
 import { relayLogLine } from './relay-diagnostic-log'
 
-const STALE_SOCKET_PROBE_TIMEOUT_MS = 500
+const STALE_SOCKET_PROBE_TIMEOUT_MS = 1000
+
+// Why these codes: each proves the path does not terminate at a live listener — nothing
+// listening (ECONNREFUSED), the file vanished mid-probe (ENOENT), or the connection died
+// the moment we wrote to a phantom accept (EPIPE/ECONNRESET, seen on virtiofs dead inodes).
+// Ambiguous errors (EACCES, ETIMEDOUT) keep the path.
+const STALE_PROBE_ERROR_CODES = new Set(['ECONNREFUSED', 'ENOENT', 'EPIPE', 'ECONNRESET'])
 
 type SocketIdentity = {
   dev: bigint
@@ -169,16 +176,16 @@ export class RelaySocketOwnership {
       }
       callback()
     }
-    probe.once('connect', () => {
+    const held = (): void => {
       finish(() => {
         probe.destroy()
         fail(listenError)
       })
-    })
-    probe.once('error', (probeError: NodeJS.ErrnoException) => {
+    }
+    const stale = (probeError: NodeJS.ErrnoException): void => {
       finish(() => {
         if (
-          (probeError.code !== 'ECONNREFUSED' && probeError.code !== 'ENOENT') ||
+          !STALE_PROBE_ERROR_CODES.has(probeError.code ?? '') ||
           !this.unlinkIfStillStale(blockedIdentity)
         ) {
           fail(listenError)
@@ -186,7 +193,23 @@ export class RelaySocketOwnership {
         }
         retry()
       })
+    }
+    probe.once('connect', () => {
+      // A bare accept is not proof of life: shared-mount socket files (virtiofs — the
+      // durable-home mount in devpods) phantom-accept on a dead inode and the socket then
+      // dies on first write. A live relay answers a valid handshake frame, so write one:
+      // a reply means `held`, an I/O error means `stale`, and silence or a clean close
+      // without a reply stays `held` — we never unlink a path whose owner we could not
+      // positively rule out.
+      probe.once('data', held)
+      probe.once('close', (hadError) => {
+        if (!hadError) {
+          held()
+        }
+      })
+      probe.write(encodeHandshakeFrame({ type: 'orca-relay-handshake', version: RELAY_VERSION }))
     })
+    probe.once('error', stale)
     timeout = setTimeout(() => {
       finish(() => {
         probe.destroy()

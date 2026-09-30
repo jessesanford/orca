@@ -69,6 +69,17 @@ describe('parseRelayEndpointIncumbentProbe', () => {
     expect(incumbent.socketPresent).toBe(true)
   })
 
+  it('reports unverifiable for a phantom accept that no process provably holds', () => {
+    const incumbent = parseRelayEndpointIncumbentProbe(
+      SOCK,
+      probeOutput(['PRESENT=yes', 'LISTEN=accepted', 'HOLDERS_SOURCE=lsof'])
+    )
+    expect(incumbent.verdict).toBe('unverifiable')
+    expect(incumbent.evidence).toBe('inconclusive')
+    expect(incumbent.holdersEnumerable).toBe(true)
+    expect(mayLaunchOverRelayEndpoint(incumbent)).toBe(true)
+  })
+
   it('reports unverifiable when the host cannot enumerate socket holders', () => {
     const incumbent = parseRelayEndpointIncumbentProbe(
       SOCK,
@@ -213,7 +224,7 @@ describe('withHandshakeRefusalEvidence', () => {
   it('leaves stronger evidence in place', () => {
     const probed = parseRelayEndpointIncumbentProbe(
       SOCK,
-      probeOutput(['PRESENT=yes', 'LISTEN=accepted', 'HOLDERS_SOURCE=lsof'])
+      probeOutput(['PRESENT=yes', 'LISTEN=accepted', 'HOLDERS_SOURCE=lsof', 'HOLDER=500 yes 0 0'])
     )
     expect(withHandshakeRefusalEvidence(probed).evidence).toBe('accepted-connection')
   })
