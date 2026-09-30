@@ -12,6 +12,7 @@ a patch lands upstream or a new one is added.
 | `feat/ssh-target-registration-rpc` | feature | `feat(rpc): ssh.importConfig…`, `feat(rpc): ssh.removeTarget…` | Headless registration lifecycle for DevPod-managed targets |
 | `feat/pairing-offer-rpc` | feature | `serve: emit both runtime and mobile pairing URLs`, `feat(rpc): pairing.createOffer…` | Operator-side client pairing without serve restart |
 | `docs/ssh-target-endpoint-identity` | docs | `docs(ssh): design proposal…` | Design: rebind targets by endpoint identity |
+| `fix/ssh-relay-phantom-accept` | bugfix | `fix(ssh-relay): treat accepted-but-unheld relay sockets as stale, probe with handshake at bind` | Unwedge relay relaunch over stale sockets on shared-mount homes |
 
 Functional dependency: `feat/ssh-target-registration-rpc` registers methods on the SSH
 surface that `fix/headless-serve-ssh` makes reachable in serve mode. Merge order:
@@ -72,11 +73,33 @@ fix → feat (the branches still compile and test independently).
   `sync-orca-workspace.sh` compensates for, and the shape of an in-tree rebind. Proposal
   only; no code.
 
+## fix/ssh-relay-phantom-accept
+
+- `src/main/ssh/ssh-relay-endpoint-incumbent.ts` — `LISTEN=accepted` + a complete holder
+  enumeration of zero is now `unverifiable`/`inconclusive` instead of `live`. A dead relay
+  socket on a virtiofs durable-home mount phantom-accepts: `connect()` succeeds on the
+  inode and dies on first write, so a bare accept is not positive evidence of life.
+  `unverifiable` still permits the relaunch; the daemon arbitrates atomically at bind.
+- `src/relay/relay-socket-ownership.ts` — `probeBlockedPath` no longer treats a bare
+  accept as held. It writes a real `orca-relay-handshake` frame: a reply means a live
+  listener (fail, never steal), `EPIPE`/`ECONNRESET` (plus existing
+  `ECONNREFUSED`/`ENOENT`) means phantom accept (identity-checked unlink + retry), and
+  silence or a clean close stays held. Probe timeout 500 → 1000ms to cover the
+  handshake round-trip.
+- Motivation: devpod durable-home `.orca-remote` socket files survive relay death and
+  phantom-accept, producing the `probe ALIVE → reconnect → EPIPE` wedge loop where
+  terminals hang at "Connecting…" forever.
+- New `src/relay/relay-socket-ownership.test.ts` covers dead file reclaim, accept-then-
+  destroy reclaim, handshake-answer refuse, silent-listener refuse, and clean-close
+  refuse. `docs/reference/ssh-execution-boundary.md` documents the evidence asymmetry.
+
 ## Verification performed
 
 - `pnpm tc` clean on every branch.
 - `pnpm test src/main/runtime/rpc/methods/ssh.test.ts` — 12/12.
 - `pnpm test src/main/runtime/rpc/methods/pairing.test.ts` — 5/5.
+- `pnpm test src/relay/relay-socket-ownership.test.ts src/main/ssh/ssh-relay-endpoint-incumbent.test.ts` — 36/36.
+- `pnpm test src/main/ssh/` — 181 files, 2,731 tests, all pass.
 - `oxlint` clean on all branch-touched files.
 - Live end-to-end (serve container on the built unpack): `ssh.importConfig` → `ssh.connect`
   → `repo:`-scoped standalone project → mTLS daemon probe; idempotent re-register;
