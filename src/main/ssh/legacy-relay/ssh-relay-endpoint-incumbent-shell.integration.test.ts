@@ -40,6 +40,12 @@ process.on('SIGTERM', () => process.exit(0))
 // Self-limiting: these outlive a SIGKILLed relay under test.
 const IDLE_SERVICE_SOURCE = 'setTimeout(() => {}, 60000)\n'
 
+// A listener whose argv never names relay.js: the squatter a corroboration gate must catch.
+const SQUATTER_SOURCE = `
+const net = require('net')
+net.createServer(() => {}).listen(process.argv[2], () => process.stdout.write('READY\\n'))
+`
+
 function sh(script: string): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile('/bin/sh', ['-c', script], { timeout: 20_000 }, (error, stdout) => {
@@ -100,6 +106,7 @@ async function waitForChildCount(
 beforeAll(async () => {
   workDir = mkdtempSync(join(tmpdir(), 'orca-relay-incumbent-'))
   writeFileSync(join(workDir, 'relay.js'), FAKE_RELAY_SOURCE)
+  writeFileSync(join(workDir, 'squatter.js'), SQUATTER_SOURCE)
   for (const filename of RELAY_DAEMON_SERVICE_ENTRY_FILENAMES) {
     writeFileSync(join(workDir, filename), IDLE_SERVICE_SOURCE)
   }
@@ -144,6 +151,31 @@ posixOnly('relay endpoint probe against a real socket', () => {
       unrecognizedChildCount: 0
     })
     expect(isReapableRelayHusk(incumbent)).toBe(true)
+  })
+
+  it('never reads a foreign process squatting on the socket path as the live relay', async () => {
+    const sockPath = join(workDir, 'squatted.sock')
+    const squatter = spawn(process.execPath, [join(workDir, 'squatter.js'), sockPath], {
+      stdio: ['ignore', 'pipe', 'ignore']
+    })
+    running.push(squatter)
+    await new Promise<void>((resolve, reject) => {
+      squatter.stdout.on('data', () => resolve())
+      squatter.on('exit', () => reject(new Error('squatter exited before listening')))
+    })
+
+    const incumbent = await probe(sockPath)
+
+    expect(incumbent.socketPresent).toBe(true)
+    if (!hasLsof) {
+      // Without an enumerator the accept cannot be attributed; the conservative read stands.
+      expect(incumbent.verdict).toBe('live')
+      return
+    }
+    expect(incumbent.verdict).toBe('unverifiable')
+    expect(incumbent.holders.map((holder) => holder.pid)).toEqual([squatter.pid])
+    expect(incumbent.holders[0].matchesRelayArgv).toBe(false)
+    expect(isReapableRelayHusk(incumbent)).toBe(false)
   })
 
   it("counts the daemon's own service children but does not hold them against it", async () => {

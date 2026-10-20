@@ -117,6 +117,38 @@ describe('the host-side relay endpoint census', () => {
     await expect(census()).resolves.toEqual({ verdict: 'live', count: 1 })
   })
 
+  it('still asks a relay whose probe evidence is unattributed, and demotes when it cannot answer', async () => {
+    hostAnswers(`${sock(1)}\n`)
+    // An accept with no enumerable relay holder: whatever answered may be a squatter.
+    probeRelayEndpointIncumbent.mockResolvedValue(
+      incumbent({ holdersEnumerable: false, holders: [] })
+    )
+
+    await expect(census()).resolves.toEqual({ verdict: 'unverifiable', count: 1 })
+    expect(countRelayEndpointPtys).toHaveBeenCalledWith(conn, '/usr/bin/node', sock(1), undefined)
+  })
+
+  it('demotes an endpoint held only by a foreign process when the relay cannot answer', async () => {
+    hostAnswers(`${sock(1)}\n`)
+    probeRelayEndpointIncumbent.mockResolvedValue(
+      incumbent({
+        evidence: 'holder-process',
+        holders: [{ pid: 9, matchesRelayArgv: false, childCount: 1, unrecognizedChildCount: 1 }]
+      })
+    )
+
+    await expect(census()).resolves.toEqual({ verdict: 'unverifiable', count: 1 })
+  })
+
+  it('keeps a corroborated working relay live where the endpoint can never answer', async () => {
+    // `/tmp/.orca-relay-*` sockets are structurally unaskable; corroborated holder evidence is
+    // the only proof available and must still carry the verdict.
+    hostAnswers('/tmp/.orca-relay-1000/relay-1a2b/relay-aa.sock\n')
+    probeRelayEndpointIncumbent.mockResolvedValue(incumbent({ holders: [working] }))
+
+    await expect(census()).resolves.toEqual({ verdict: 'live', count: 1 })
+  })
+
   it.each([
     ['the listing failed', () => execCommand.mockRejectedValue(new Error('channel closed'))],
     [

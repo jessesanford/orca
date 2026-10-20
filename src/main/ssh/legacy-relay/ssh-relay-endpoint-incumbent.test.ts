@@ -31,7 +31,7 @@ function probeOutput(lines: string[]): string {
 }
 
 describe('parseRelayEndpointIncumbentProbe', () => {
-  it('reports live when the socket accepted a connection', () => {
+  it('reports live when the socket accepted and a relay-argv holder corroborates', () => {
     const incumbent = parseRelayEndpointIncumbentProbe(
       SOCK,
       probeOutput([
@@ -46,6 +46,60 @@ describe('parseRelayEndpointIncumbentProbe', () => {
     expect(incumbent.holders).toEqual([
       { pid: 4242, matchesRelayArgv: true, childCount: 13, unrecognizedChildCount: 11 }
     ])
+  })
+
+  it('reports live when any holder names this relay at this socket, alongside foreign ones', () => {
+    const incumbent = parseRelayEndpointIncumbentProbe(
+      SOCK,
+      probeOutput([
+        'PRESENT=yes',
+        'LISTEN=accepted',
+        'HOLDERS_SOURCE=lsof',
+        'HOLDER=4241 no 0 0',
+        'HOLDER=4242 yes 13 11'
+      ])
+    )
+    expect(incumbent.verdict).toBe('live')
+    expect(incumbent.evidence).toBe('accepted-connection')
+  })
+
+  it('keeps an accepted socket live when the host cannot enumerate holders', () => {
+    const incumbent = parseRelayEndpointIncumbentProbe(
+      SOCK,
+      probeOutput(['PRESENT=yes', 'LISTEN=accepted', 'HOLDERS_SOURCE=unavailable'])
+    )
+    expect(incumbent.verdict).toBe('live')
+    expect(incumbent.evidence).toBe('accepted-connection')
+    expect(incumbent.holdersEnumerable).toBe(false)
+  })
+
+  it('never reports live for an accepted socket whose enumerable holder list is empty', () => {
+    const incumbent = parseRelayEndpointIncumbentProbe(
+      SOCK,
+      probeOutput([
+        'PRESENT=yes',
+        'LISTEN=accepted',
+        'FS_TYPE=linux ef53 ef53',
+        'HOLDERS_SOURCE=lsof'
+      ])
+    )
+    expect(incumbent.verdict).toBe('unverifiable')
+    expect(incumbent.evidence).toBe('inconclusive')
+  })
+
+  it('never reports live for an accepted socket held only by foreign processes', () => {
+    const incumbent = parseRelayEndpointIncumbentProbe(
+      SOCK,
+      probeOutput([
+        'PRESENT=yes',
+        'LISTEN=accepted',
+        'HOLDERS_SOURCE=lsof',
+        'HOLDER=91 no 2 2'
+      ])
+    )
+    expect(incumbent.verdict).toBe('unverifiable')
+    expect(incumbent.evidence).toBe('inconclusive')
+    expect(incumbent.holders).toHaveLength(1)
   })
 
   it('reports live when a process still holds an inode that refuses connections', () => {
