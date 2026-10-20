@@ -3,6 +3,14 @@ import { ORCA_SESSION_ADDRESS_PREFIX } from '../../../shared/orca-session-addres
 
 export const KEEPALIVE_INTERVAL_MS = 10_000
 
+// Why: a non-long-poll dispatch that never settles pins its connection's inflight slot forever —
+// the socket transport suspends the idle reaper while a dispatch is in flight, so enough wedged
+// handlers exhaust the connection budget and later connections handshake without ever being
+// served. Matches the CLI's default request timeout (client.ts requestTimeoutMs = 60s) so the
+// synthesized error lands inside the caller's own patience window. Long-polls are exempt by
+// construction: they are the dispatches meant to run long. See §3.1.
+export const DISPATCH_DEADLINE_MS = 60_000
+
 // Why: cap long-polls at half the 32-slot connection budget so they can't starve short RPCs; overflow → runtime_busy. See §7 risk #2.
 export const LONG_POLL_CAP = 16
 

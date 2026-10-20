@@ -36,7 +36,7 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
     }
 
     try {
-      return await this.dispatcher.dispatch(request, {
+      const dispatch = this.dispatcher.dispatch(request, {
         signal:
           longPoll ||
           request.method === 'linear.commentEdit' ||
@@ -45,9 +45,41 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
             : undefined,
         callerScope
       })
+      // Why: long-polls legitimately outlive any short deadline — keepalives plus the abort
+      // signal are their bound instead. Only short dispatches race the deadline.
+      if (longPoll) {
+        return await dispatch
+      }
+      return await this.awaitDispatchDeadline(request, dispatch)
     } finally {
       this.releaseLongPoll(longPoll)
     }
+  }
+
+  // Why: a dispatch that never settles pins the socket's inflight slot — the transport suspends
+  // the idle reaper while a dispatch is pending, so enough wedged handlers exhaust the connection
+  // budget and later connections handshake without ever being served. The raced-off dispatch keeps
+  // running (a dispatch cannot be cancelled): its late reply lands on an already-answered request,
+  // and the catch keeps a late rejection from going unhandled.
+  protected awaitDispatchDeadline(
+    request: RpcRequest,
+    dispatch: Promise<RpcResponse>
+  ): Promise<RpcResponse> {
+    void dispatch.catch(() => {})
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<RpcResponse>((resolve) => {
+      timer = setTimeout(() => {
+        resolve(
+          this.buildError(
+            request.id,
+            'runtime_timeout',
+            `${request.method} handler did not settle within ${this.dispatchDeadlineMs}ms`
+          )
+        )
+      }, this.dispatchDeadlineMs)
+      timer.unref?.()
+    })
+    return Promise.race([dispatch, deadline]).finally(() => clearTimeout(timer))
   }
 
   // Why: one fence for both transports — the total cap protects short RPCs, the ask
