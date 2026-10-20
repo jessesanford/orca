@@ -82,6 +82,7 @@ describe('orca serve asking the app which host to run', () => {
         pairingAddress: '10.0.0.5',
         noPairing: true,
         mobilePairing: true,
+        pairingAllScopes: true,
         recipeJson: true,
         projectRoot: '/work/app'
       })
@@ -95,6 +96,7 @@ describe('orca serve asking the app which host to run', () => {
       '10.0.0.5',
       '--no-pairing',
       '--mobile-pairing',
+      '--pairing-all-scopes',
       '--recipe-json',
       '--project-root',
       '/work/app'
@@ -125,6 +127,7 @@ describe('orca serve asking the app which host to run', () => {
           pairingAddress: '10.0.0.5',
           noPairing: true,
           mobilePairing: true,
+          pairingAllScopes: true,
           grantDesktopControl: true,
           recipeJson: true,
           projectRoot: '/work/app'
@@ -139,6 +142,7 @@ describe('orca serve asking the app which host to run', () => {
       '10.0.0.5',
       '--serve-no-pairing',
       '--serve-mobile-pairing',
+      '--serve-pairing-all-scopes',
       '--serve-grant-desktop-control',
       '--serve-recipe-json',
       '--serve-project-root',

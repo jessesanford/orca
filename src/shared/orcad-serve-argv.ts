@@ -8,6 +8,8 @@ export type ServeOrcaAppArgs = {
   pairingAddress?: string | null
   noPairing?: boolean
   mobilePairing?: boolean
+  /** Also mint the complementary-scope pairing credential; refused with recipeJson. */
+  pairingAllScopes?: boolean
   grantDesktopControl?: boolean
   recipeJson?: boolean
   projectRoot?: string | null
@@ -24,6 +26,7 @@ export function serveOptionArgs(args: ServeOrcaAppArgs, prefix: '--' | '--serve-
     ...(args.pairingAddress ? [`${prefix}pairing-address`, args.pairingAddress] : []),
     ...(args.noPairing ? [`${prefix}no-pairing`] : []),
     ...(args.mobilePairing ? [`${prefix}mobile-pairing`] : []),
+    ...(args.pairingAllScopes ? [`${prefix}pairing-all-scopes`] : []),
     ...(args.grantDesktopControl ? [`${prefix}grant-desktop-control`] : []),
     ...(args.recipeJson && args.projectRoot
       ? [`${prefix}recipe-json`, `${prefix}project-root`, args.projectRoot]

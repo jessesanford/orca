@@ -89,6 +89,7 @@ export const CORE_HANDLERS: Record<string, CommandHandler> = {
     const projectRoot = typeof projectRootValue === 'string' ? projectRootValue : null
     const noPairing = flags.get('no-pairing') === true
     const mobilePairing = flags.get('mobile-pairing') === true
+    const pairingAllScopes = flags.get('pairing-all-scopes') === true
     const grantDesktopControl = flags.get('grant-desktop-control') === true
     const recipeJson = flags.get('recipe-json') === true
     const force = flags.get('force') === true
@@ -100,6 +101,7 @@ export const CORE_HANDLERS: Record<string, CommandHandler> = {
     const validationError = getServeOptionValidationError({
       noPairing,
       mobilePairing,
+      pairingAllScopes,
       grantDesktopControl,
       recipeJson,
       projectRoot
@@ -115,6 +117,7 @@ export const CORE_HANDLERS: Record<string, CommandHandler> = {
       pairingAddress: typeof pairingAddressValue === 'string' ? pairingAddressValue : null,
       noPairing,
       mobilePairing,
+      pairingAllScopes,
       grantDesktopControl,
       recipeJson,
       projectRoot,

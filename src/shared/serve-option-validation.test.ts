@@ -4,6 +4,7 @@ import { getServeFlagTypoError, getServeOptionValidationError } from './serve-op
 const validOptions = {
   noPairing: false,
   mobilePairing: false,
+  pairingAllScopes: false,
   recipeJson: false,
   projectRoot: null
 }
@@ -22,6 +23,10 @@ describe('getServeOptionValidationError', () => {
     [
       { recipeJson: true, mobilePairing: true, projectRoot: '/tmp/repo' },
       /requires runtime pairing.*--mobile-pairing/i
+    ],
+    [
+      { recipeJson: true, pairingAllScopes: true, projectRoot: '/tmp/repo' },
+      /carries only the primary pairing code.*--pairing-all-scopes/i
     ],
     [{ recipeJson: true }, /requires --project-root/i]
   ])('rejects incompatible options', (override, expected) => {

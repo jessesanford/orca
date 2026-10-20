@@ -74,6 +74,7 @@ describe('parseArgs', () => {
       projectRoot: '/work/app'
     })
     expect(parseArgs(['--mobile-pairing'])).toEqual({ mobilePairing: true })
+    expect(parseArgs(['--pairing-all-scopes'])).toEqual({ pairingAllScopes: true })
     expect(parseArgs(['--no-pairing'])).toEqual({ noPairing: true })
     expect(() => parseArgs(['--recipe-json'])).toThrow(
       'Recipe JSON output requires --project-root.'
@@ -90,6 +91,11 @@ describe('parseArgs', () => {
         `Recipe JSON output requires runtime pairing; remove ${flag}.`
       )
     }
+    expect(() =>
+      parseArgs(['--recipe-json', '--project-root', '/work/app', '--pairing-all-scopes'])
+    ).toThrow(
+      'Recipe JSON output carries only the primary pairing code; remove --pairing-all-scopes.'
+    )
   })
 
   it('rejects --bind with no value rather than silently binding the default', () => {

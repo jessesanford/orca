@@ -20,6 +20,7 @@ Options:
   --json                   Print the one-line server readiness JSON to stdout.
   --no-pairing             Do not create a client pairing offer at startup.
   --mobile-pairing         Create a mobile-scoped pairing offer with a QR code.
+  --pairing-all-scopes     Also mint the complementary-scope pairing credential.
   --grant-desktop-control  Allow desktop control in the default runtime offer;
                            cannot combine with --no-pairing or --mobile-pairing.
   --recipe-json            Print only the VM recipe line; requires --project-root.
@@ -58,6 +59,8 @@ export function parseArgs(argv: string[]): OrcadCommandArguments {
       options.noPairing = true
     } else if (arg === '--mobile-pairing') {
       options.mobilePairing = true
+    } else if (arg === '--pairing-all-scopes') {
+      options.pairingAllScopes = true
     } else if (arg === '--grant-desktop-control') {
       options.grantDesktopControl = true
     } else if (arg === '--recipe-json') {
@@ -97,6 +100,7 @@ export function parseArgs(argv: string[]): OrcadCommandArguments {
   const validationError = getServeOptionValidationError({
     noPairing: options.noPairing === true,
     mobilePairing: options.mobilePairing === true,
+    pairingAllScopes: options.pairingAllScopes === true,
     grantDesktopControl: options.grantDesktopControl,
     recipeJson: options.recipeJson === true,
     projectRoot: options.projectRoot
