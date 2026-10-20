@@ -190,6 +190,23 @@ export class DeviceRegistry {
     )
   }
 
+  // Why: only never-scanned rows may be renamed here — a paired device's name
+  // is operator-visible state managed through device management, not offer minting.
+  setPendingDeviceName(deviceId: string, name: string): boolean {
+    const index = this.devices.findIndex(
+      (device) => device.deviceId === deviceId && device.lastSeenAt === 0
+    )
+    if (index === -1) {
+      return false
+    }
+    const nextDevices = this.devices.map((device, candidateIndex) =>
+      candidateIndex === index ? { ...device, name } : device
+    )
+    this.save(nextDevices)
+    this.devices = nextDevices
+    return true
+  }
+
   setRelayBinding(deviceId: string, binding: RelayDeviceBinding): boolean {
     return (
       binding.relayDeviceId === deviceId &&

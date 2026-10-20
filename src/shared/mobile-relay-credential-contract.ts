@@ -29,6 +29,27 @@ export const PairingGetEndpointsParamsSchema = z
   })
   .strict()
 
+// Why: operator-surface offer minting (headless serve pairing). scope picks
+// the device class the offer encodes; rotate replaces a stale pending token.
+export const PairingCreateOfferParamsSchema = z
+  .object({
+    scope: z.enum(['runtime', 'mobile']).optional(),
+    // Why: names render in device lists and log lines — control and format
+    // characters (newlines, ANSI, bidi) must not pass from a remote caller.
+    name: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[^\p{Cc}\p{Cf}]+$/u)
+      .optional(),
+    rotate: z.boolean().optional(),
+    // Why: omitted ⇒ loopback-only offer (wildcard binds are not
+    // client-reachable). Accepts host, host:port, or ws(s)/http(s) URL —
+    // resolveAdvertisedPairingEndpoint validates the form.
+    address: z.string().min(1).max(256).optional()
+  })
+  .strict()
+
 export const DeviceCredentialInstalledSchema = z
   .object({
     v: z.literal(1),
@@ -86,6 +107,22 @@ export const PairingGetEndpointsResultSchema = z
 
 export type PairingProvisionRelayParams = z.infer<typeof PairingProvisionRelayParamsSchema>
 export type PairingGetEndpointsParams = z.infer<typeof PairingGetEndpointsParamsSchema>
+export type PairingCreateOfferParams = z.infer<typeof PairingCreateOfferParamsSchema>
+export type PairingCreateOfferResult =
+  | {
+      available: true
+      pairingUrl: string
+      endpoint: string
+      deviceId: string
+      webClientUrl: string | null
+      scope: 'runtime' | 'mobile'
+      // Why: a re-issued pending credential is indistinguishable from a fresh
+      // one without this — callers must know whether an offer they were just
+      // handed is the same token already printed elsewhere.
+      pendingAction: 'created' | 'reused' | 'rotated'
+      qr: string | null
+    }
+  | { available: false; reason: string; guidance: string }
 export type DeviceCredentialInstalled = z.infer<typeof DeviceCredentialInstalledSchema>
 export type DeviceCredentialInstallStatusResult = z.infer<
   typeof DeviceCredentialInstallStatusResultSchema

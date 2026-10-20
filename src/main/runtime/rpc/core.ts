@@ -5,6 +5,8 @@ import type { OrcaRuntimeService, OrchestrationCompatibilityCallerAuthority } fr
 import type { StructuredAgentCliSourceEvidence } from '../../native-chat/structured-agent-cli-source'
 import type {
   DeviceCredentialInstalled,
+  PairingCreateOfferParams,
+  PairingCreateOfferResult,
   PairingGetEndpointsParams,
   PairingGetEndpointsResult,
   PairingProvisionRelayParams
@@ -36,6 +38,12 @@ export type DeviceSelfRpcContext = {
 export type PairingRpcContext = {
   getEndpoints(params: PairingGetEndpointsParams): Promise<PairingGetEndpointsResult>
   provisionRelay(params: PairingProvisionRelayParams): Promise<DeviceCredentialInstalled>
+}
+
+// Why: unix-socket operator surface — offer minting without a restart, for
+// headless serve brokers. Absent on paired-client (WebSocket) dispatches.
+export type LocalPairingRpcContext = {
+  createOffer(params: PairingCreateOfferParams): Promise<PairingCreateOfferResult>
 }
 
 export type RpcEnvelopeMeta = {
@@ -138,6 +146,7 @@ export type RpcContext = {
   // Why: federation pins the authenticated saved-environment caller without exposing its token to handlers or storage.
   authenticatedCallerFingerprint?: string
   pairing?: PairingRpcContext
+  localPairing?: LocalPairingRpcContext
   deviceSelf?: DeviceSelfRpcContext
   // Why: set only on a desktop that relays; it lists the configured servers it shows.
   mobileRelayHosts?: {

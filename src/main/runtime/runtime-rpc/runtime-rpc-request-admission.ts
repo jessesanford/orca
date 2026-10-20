@@ -2,12 +2,23 @@ import type { RuntimeMetadata } from '../../../shared/runtime-bootstrap'
 import { writeRuntimeMetadata } from '../runtime-metadata'
 import type { RpcMessageContext } from '../rpc/transport'
 import type { RpcRequest, RpcResponse } from '../rpc/core'
+import type {
+  PairingCreateOfferParams,
+  PairingCreateOfferResult
+} from '../../../shared/mobile-relay-credential-contract'
 import { errorResponse } from '../rpc/errors'
 import { RuntimeRpcBinaryRouting } from './runtime-rpc-binary-routing'
 import { classifyRuntimeLongPoll, type RuntimeLongPollClass } from './runtime-rpc-long-poll'
 import { OWNER_RPC_CALLER_SCOPE, type RpcCallerScope } from '../rpc/rpc-caller-scope'
 
 export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
+  // Why: offer minting lives on RuntimeRpcPairing further down the mixin
+  // chain; declared here so the unix-socket dispatch can expose it without
+  // a type assertion. Undefined until the pairing subclass implements it.
+  protected createLocalPairingOffer?(
+    params: PairingCreateOfferParams
+  ): Promise<PairingCreateOfferResult>
+
   // Why: Unix socket dispatch is one-shot and auths via the shared token from the 0o600 metadata file. See §3.1.
   protected async handleMessage(
     rawMessage: string,
@@ -43,7 +54,12 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
           request.method === 'linear.commentDelete'
             ? context?.signal
             : undefined,
-        callerScope
+        callerScope,
+        // Why: pairing.createOffer mints operator offers without a serve
+        // restart; undefined on builds where the pairing subclass is absent.
+        localPairing: this.createLocalPairingOffer
+          ? { createOffer: this.createLocalPairingOffer.bind(this) }
+          : undefined
       })
     } finally {
       this.releaseLongPoll(longPoll)

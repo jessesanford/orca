@@ -26,6 +26,7 @@ import {
 import { RegisterDeviceKeyParamsSchema } from '../device-key-registration-contract'
 import { HostAccountLaunchEnvParams } from '../host-account-launch-env'
 import {
+  PairingCreateOfferParamsSchema,
   PairingGetEndpointsParamsSchema,
   PairingProvisionRelayParamsSchema
 } from '../mobile-relay-credential-contract'
@@ -1203,6 +1204,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'orchestration.workerStop': WorkerDispatchParamsOfOrchestrationWorkerStopParams,
   'orchestration.workerTerminalUserInput': OrchestrationWorkerTerminalUserInputParams,
   'pairing.delegatedMobileDevice.sync': DelegatedMobileDeviceSyncParamsSchema,
+  'pairing.createOffer': PairingCreateOfferParamsSchema,
   'pairing.getEndpoints': PairingGetEndpointsParamsSchema,
   'pairing.provisionRelay': PairingProvisionRelayParamsSchema,
   'pairing.registerDeviceKey': RegisterDeviceKeyParamsSchema,

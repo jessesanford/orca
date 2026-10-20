@@ -92,6 +92,17 @@ export type MobilePairingOfferAvailable = {
 
 export type MobilePairingOffer = PairingOfferUnavailable | MobilePairingOfferAvailable
 
+/** Direct (non-Relay) offer minted by createPairingOffer — serve readiness, IPC, operator RPC. */
+export type DirectPairingOfferAvailable = {
+  available: true
+  pairingUrl: string
+  endpoint: string
+  deviceId: string
+  webClientUrl: string | null
+}
+
+export type DirectPairingOffer = PairingOfferUnavailable | DirectPairingOfferAvailable
+
 export type PairingIdentityInitialization =
   | { ok: true; deviceRegistry: DeviceRegistry; e2eeKeypair: E2EEKeypair }
   | { ok: false; failure: PairingOfferUnavailable }
