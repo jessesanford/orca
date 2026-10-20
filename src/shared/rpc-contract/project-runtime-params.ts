@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { OptionalString, requiredString } from './rpc-param-primitives'
+import { OptionalBoolean, OptionalString, requiredString } from './rpc-param-primitives'
 import {
   LOCAL_EXECUTION_HOST_ID,
   normalizeExecutionHostId,
@@ -31,7 +31,10 @@ export const RequestedHostId = requiredString('Missing host ID').transform((valu
 })
 
 export const ProjectHostSetupExistingFolder = z.object({
-  projectId: requiredString('Missing project ID'),
+  // Why optional: headless registrants can't know `repo:<id>` before the repo
+  // exists — the runtime derives the project key when omitted.
+  projectId: OptionalString,
+  hostLocal: OptionalBoolean,
   projectProviderIdentity: ProjectProviderIdentity.optional(),
   hostId: RequestedHostId,
   path: requiredString('Missing project path'),
