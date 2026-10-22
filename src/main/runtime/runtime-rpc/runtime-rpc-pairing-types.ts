@@ -55,9 +55,10 @@ export type OrcaRuntimeRpcServerOptions = {
    */
   pinnedBindHost?: string
   webClientRoot?: string
-  // Why: test-only overrides for the two constants below; production must not pass these (defaults set by §3.1).
+  // Why: test-only overrides for the three constants below; production must not pass these (defaults set by §3.1).
   keepaliveIntervalMs?: number
   longPollCap?: number
+  dispatchDeadlineMs?: number
   // Why: test-only override for the ownership reclaim cadence.
   metadataOwnershipPollMs?: number
   // Why: tests may inject inert protocol stages before production authorization registers them.
@@ -91,6 +92,17 @@ export type MobilePairingOfferAvailable = {
 }
 
 export type MobilePairingOffer = PairingOfferUnavailable | MobilePairingOfferAvailable
+
+/** Direct (non-Relay) offer minted by createPairingOffer — serve readiness, IPC, operator RPC. */
+export type DirectPairingOfferAvailable = {
+  available: true
+  pairingUrl: string
+  endpoint: string
+  deviceId: string
+  webClientUrl: string | null
+}
+
+export type DirectPairingOffer = PairingOfferUnavailable | DirectPairingOfferAvailable
 
 export type PairingIdentityInitialization =
   | { ok: true; deviceRegistry: DeviceRegistry; e2eeKeypair: E2EEKeypair }

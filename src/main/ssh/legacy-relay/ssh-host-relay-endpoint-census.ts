@@ -14,6 +14,7 @@ import { execCommand } from '../remote-exec/remote-exec-command'
 import {
   isReapableRelayHusk,
   probeRelayEndpointIncumbent,
+  relayEndpointIncumbentIsCorroborated,
   type RelayEndpointIncumbent
 } from './ssh-relay-endpoint-incumbent'
 import { countRelayEndpointPtys } from './ssh-relay-endpoint-pty-count'
@@ -105,7 +106,8 @@ export async function censusHostRelayEndpoints(
 
 /**
  * The probe proves a relay idle only when it can read its whole process tree; otherwise the relay
- * itself is asked, and only when it cannot answer does the probe's conservative reading stand.
+ * itself is asked. When the relay cannot answer either, only the probe's corroborated reading
+ * stands — an unattributed accept never authorizes 'live'.
  */
 async function classifyEndpoint(
   conn: SshConnection,
@@ -114,11 +116,11 @@ async function classifyEndpoint(
   endpoint: string,
   signal: AbortSignal | undefined
 ): Promise<'idle' | 'live' | 'unverifiable'> {
+  let incumbent: RelayEndpointIncumbent | undefined
   let reading: RelayEndpointProbeReading
   try {
-    reading = readRelayEndpointProbe(
-      await probeRelayEndpointIncumbent(conn, host, nodePath, endpoint, { signal })
-    )
+    incumbent = await probeRelayEndpointIncumbent(conn, host, nodePath, endpoint, { signal })
+    reading = readRelayEndpointProbe(incumbent)
   } catch {
     reading = 'unverifiable'
   }
@@ -129,7 +131,13 @@ async function classifyEndpoint(
   if (ptys !== null) {
     return ptys > 0 ? 'live' : 'idle'
   }
-  return reading === 'holds-work' ? 'live' : 'unverifiable'
+  // Why corroboration gates this: a short-base socket can never answer the PTY ask, so an
+  // unattributed accept standing in for it would read a foreign squatter as our live relay.
+  return reading === 'holds-work' &&
+    incumbent !== undefined &&
+    relayEndpointIncumbentIsCorroborated(incumbent)
+    ? 'live'
+    : 'unverifiable'
 }
 
 type RelayEndpointProbeReading = 'idle' | 'holds-work' | 'unverifiable'

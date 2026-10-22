@@ -20,6 +20,7 @@ import { RUNTIME_METADATA_OWNERSHIP_POLL_MS } from '../runtime-metadata-ownershi
 import {
   ASK_LONG_POLL_SHARE,
   BROWSER_HOST_LONG_POLL_SHARE,
+  DISPATCH_DEADLINE_MS,
   KEEPALIVE_INTERVAL_MS,
   LONG_POLL_CAP,
   SPECIALIZED_LONG_POLL_SHARE
@@ -55,6 +56,7 @@ export class RuntimeRpcState {
   protected readonly authToken = randomBytes(24).toString('hex')
   protected readonly keepaliveIntervalMs: number
   protected readonly longPollCap: number
+  protected readonly dispatchDeadlineMs: number
   protected readonly metadataOwnershipPollMs: number
   protected readonly askLongPollCap: number
   protected readonly browserHostLongPollCap: number
@@ -118,6 +120,7 @@ export class RuntimeRpcState {
     webClientRoot,
     keepaliveIntervalMs = KEEPALIVE_INTERVAL_MS,
     longPollCap = LONG_POLL_CAP,
+    dispatchDeadlineMs = DISPATCH_DEADLINE_MS,
     metadataOwnershipPollMs = RUNTIME_METADATA_OWNERSHIP_POLL_MS,
     methods
   }: OrcaRuntimeRpcServerOptions) {
@@ -135,6 +138,7 @@ export class RuntimeRpcState {
     this.webClientRoot = webClientRoot
     this.keepaliveIntervalMs = keepaliveIntervalMs
     this.longPollCap = longPollCap
+    this.dispatchDeadlineMs = dispatchDeadlineMs
     this.metadataOwnershipPollMs = metadataOwnershipPollMs
     // Why: derived, not configurable — the reservation must hold for whatever cap a caller picks.
     this.askLongPollCap = Math.max(1, Math.floor(longPollCap * ASK_LONG_POLL_SHARE))

@@ -15,6 +15,9 @@
  *   nothing holds this socket path, established positively (a connect that was refused *and*
  *   an enumeration that found no holder). A relay whose socket was already unlinked is
  *   invisible to this probe by construction.
+ * - a bare accept does not prove the incumbent is ours: a foreign process can squat on the
+ *   path, and a socket can accept with no enumerable holder. An accept stands as `live` only
+ *   where holder evidence corroborates a relay argv — or cannot contradict it.
  * - a probe that could not run, a host without `lsof`, or a connect that failed for any other
  *   reason is `unverifiable`. It never authorizes client cleanup.
  * - a refused socket is `exited` only on a local disk. On a network home another machine's
@@ -183,7 +186,7 @@ export function parseRelayEndpointIncumbentProbe(
     .filter((holder): holder is RelayEndpointHolder => holder !== null)
 
   if (listen === 'accepted') {
-    return {
+    const accepted: RelayEndpointIncumbent = {
       sockPath,
       verdict: 'live',
       evidence: 'accepted-connection',
@@ -191,6 +194,12 @@ export function parseRelayEndpointIncumbentProbe(
       holders,
       holdersEnumerable
     }
+    // An accept is unattributable when enumerable holders show no relay argv — 'unverifiable',
+    // never 'exited' (something did answer). Only an unenumerable host keeps the bare reading.
+    if (holdersEnumerable && !relayEndpointIncumbentIsCorroborated(accepted)) {
+      return { ...accepted, verdict: 'unverifiable', evidence: 'inconclusive' }
+    }
+    return accepted
   }
   if (holders.length > 0) {
     // The inode is held by a running process that is not accepting — wedged, not gone.
@@ -296,6 +305,20 @@ export async function probeRelayEndpointIncumbent(
     // Any other unanswered probe observes nothing. It is never evidence of death.
     return unverifiableEndpoint(sockPath)
   }
+}
+
+/**
+ * Holder evidence that positively ties the socket to a relay: an enumerable list containing a
+ * pid whose argv names relay.js at this path. An unenumerable host, a provably empty list, or
+ * only foreign pids are all absence of proof — never proof of absence.
+ */
+export function relayEndpointIncumbentIsCorroborated(
+  incumbent: RelayEndpointIncumbent
+): boolean {
+  return (
+    incumbent.holdersEnumerable &&
+    incumbent.holders.some((holder) => holder.matchesRelayArgv)
+  )
 }
 
 /**

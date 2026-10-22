@@ -27,6 +27,12 @@ export type ServeReadiness = {
   managedWslCliReconciliation: 'pending' | 'settled' | 'failed'
   pairing: ServePairingReadiness
   /**
+   * Complementary-scope offer, minted only on explicit --pairing-all-scopes.
+   * Optional so older consumers see a single `pairing` object; absent means
+   * no second credential exists at all.
+   */
+  secondaryPairing?: ServePairingReadiness
+  /**
    * Build identity, Node ABI and the cross-process terminal-daemon self-test.
    *
    * Optional because the Electron `--serve` host does not publish one yet; readers must
@@ -88,6 +94,7 @@ export function renderServeReadiness(
       advertisedEndpoint: readiness.advertisedEndpoint,
       managedWslCliReconciliation: readiness.managedWslCliReconciliation,
       pairing: readiness.pairing,
+      ...(readiness.secondaryPairing ? { secondaryPairing: readiness.secondaryPairing } : {}),
       ...(readiness.health ? { health: readiness.health } : {})
     })
   }
@@ -126,6 +133,22 @@ function renderHumanReadiness(readiness: ServeReadiness): string {
   } else {
     lines.push(`Pairing unavailable: ${readiness.pairing.reason}`)
     lines.push(`Pairing guidance: ${readiness.pairing.guidance}`)
+  }
+  if (readiness.secondaryPairing) {
+    const secondary = readiness.secondaryPairing
+    if (secondary.available) {
+      if (secondary.webClientUrl) {
+        lines.push(`Secondary web client URL: ${secondary.webClientUrl}`)
+      }
+      if (secondary.scope === 'mobile' && secondary.qr) {
+        lines.push(`Mobile pairing QR:\n${secondary.qr}`)
+      }
+      lines.push(
+        `${secondary.scope === 'mobile' ? 'Mobile' : 'Runtime'} pairing URL: ${secondary.url}`
+      )
+    } else {
+      lines.push(`Secondary pairing unavailable: ${secondary.reason}`)
+    }
   }
   return lines.join('\n')
 }

@@ -15,17 +15,14 @@ import type {
 import type { Repo } from '../../shared/repo-types'
 import {
   getRepoExecutionHostId,
-  getSshTargetIdForExecutionHost,
   parseExecutionHostId,
   type ExecutionHostId
 } from '../../shared/execution-host'
 import { getProjectHostSetupForRepo } from '../../shared/project-host-setup-lookup'
+import { resolveExistingFolderRepo } from './project-setup-existing-folder-resolution'
 import { resolveImportedFolderProjectLink } from '../../shared/imported-folder-project-identity'
 import { invalidateAuthorizedRootsCache } from '../ipc/registered-worktree-roots-cache'
-import {
-  SshHostNotServedError,
-  sshTargetNotConnectedMessage
-} from '../providers/ssh-host-not-served-error'
+import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 import { runWorktreeChangeInvalidators } from '../ipc/worktree-change-invalidators'
 import { prepareLocalWorktreeRootForRepo } from '../worktree-root-preparation'
 import { updateProjectHostSetupWithProvenKind } from '../folder-repo-git-conversion'
@@ -71,10 +68,6 @@ function assertCloneHostIsSupported(hostId: ExecutionHostId | null | undefined):
 
 export const SERVER_SSH_PROJECT_ADD_UNAVAILABLE_MESSAGE =
   "This Orca server can't add projects on its SSH hosts. Add the SSH host on your computer to open its projects."
-
-function sshTargetNotServedError(connectionId: string): SshHostNotServedError {
-  return new SshHostNotServedError(connectionId, sshTargetNotConnectedMessage(connectionId))
-}
 
 export class RuntimeProjectHostSetupController {
   constructor(private readonly deps: RuntimeProjectHostSetupDependencies) {}
@@ -125,23 +118,13 @@ export class RuntimeProjectHostSetupController {
   async setupExistingFolder(
     args: ProjectHostSetupExistingFolderArgs
   ): Promise<ProjectHostSetupResult> {
-    if (!this.deps.getStore()) {
-      throw new Error('runtime_unavailable')
-    }
-    const kind = args.kind === 'folder' ? 'folder' : 'git'
-    const knownRepoIds = new Set(this.deps.listRepos().map((repo) => repo.id))
-    const sshTargetId = getSshTargetIdForExecutionHost(args.hostId)
-    if (sshTargetId) {
-      throw sshTargetNotServedError(sshTargetId)
-    }
-    const repo = await this.deps.addRepo(args.path, kind, args.hostId)
-    const repoWasCreated = !knownRepoIds.has(repo.id)
-    // Why: a registered row's stored remote can predate a remote the user has since added.
-    const folderRemote =
-      repoWasCreated && repo.gitRemoteIdentity !== undefined
-        ? repo
-        : await readCurrentGitRemoteIdentity(repo)
-    return this.completeSetup(args, repo, repoWasCreated, folderRemote)
+    const resolved = await resolveExistingFolderRepo(this.deps, args)
+    return this.completeSetup(
+      { ...args, projectId: resolved.projectId },
+      resolved.repo,
+      resolved.repoWasCreated,
+      resolved.folderRemote
+    )
   }
 
   /**

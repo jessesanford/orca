@@ -116,4 +116,52 @@ describe('RuntimeProjectHostSetupController host routing', () => {
     ).rejects.toThrow(/Cloning onto an SSH host is not supported/)
     expect(cloneRepo).not.toHaveBeenCalled()
   })
+
+  it('strips probe-stamped remote identity and derives a repo: project for hostLocal registrations', async () => {
+    const stamped: Repo = {
+      ...repo,
+      upstream: { owner: 'acme', repo: 'app' },
+      repoIcon: { type: 'image', src: 'https://github.com/acme/app.png', source: 'github' },
+      gitRemoteIdentity: {
+        canonicalKey: 'github.com/acme/app',
+        remoteName: 'origin',
+        remoteUrl: 'https://github.com/acme/app.git'
+      }
+    }
+    let current: Repo = stamped
+    const updateRepo = vi.fn((_target: unknown, updates: Record<string, unknown>) => {
+      current = { ...current, ...updates }
+      return current
+    })
+    const store = {
+      getProjects: () => projectHostSetupProjectionFromRepos([current]).projects,
+      getProjectHostSetups: () => [],
+      updateRepo
+    }
+    const addRepo = vi.fn().mockResolvedValue(stamped)
+    const controller = new RuntimeProjectHostSetupController({
+      getStore: () => store as never,
+      listRepos: () => [current],
+      addRepo,
+      cloneRepo: vi.fn(),
+      invalidateResolvedWorktrees: vi.fn(),
+      invalidateWorktreeScan: vi.fn(),
+      notifyReposChanged: vi.fn(),
+      countLiveTerminalsForRepo: () => 0
+    })
+
+    const result = await controller.setupExistingFolder({
+      hostId: 'local',
+      path: REPO_PATH,
+      kind: 'git',
+      hostLocal: true
+    })
+
+    expect(result.project.id).toBe('repo:repo-1')
+    expect(updateRepo).toHaveBeenCalledWith(stamped, {
+      upstream: null,
+      gitRemoteIdentity: null,
+      repoIcon: null
+    })
+  })
 })

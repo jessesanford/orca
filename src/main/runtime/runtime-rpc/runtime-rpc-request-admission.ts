@@ -2,12 +2,23 @@ import type { RuntimeMetadata } from '../../../shared/runtime-bootstrap'
 import { writeRuntimeMetadata } from '../runtime-metadata'
 import type { RpcMessageContext } from '../rpc/transport'
 import type { RpcRequest, RpcResponse } from '../rpc/core'
+import type {
+  PairingCreateOfferParams,
+  PairingCreateOfferResult
+} from '../../../shared/mobile-relay-credential-contract'
 import { errorResponse } from '../rpc/errors'
 import { RuntimeRpcBinaryRouting } from './runtime-rpc-binary-routing'
 import { classifyRuntimeLongPoll, type RuntimeLongPollClass } from './runtime-rpc-long-poll'
 import { OWNER_RPC_CALLER_SCOPE, type RpcCallerScope } from '../rpc/rpc-caller-scope'
 
 export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
+  // Why: offer minting lives on RuntimeRpcPairing further down the mixin
+  // chain; declared here so the unix-socket dispatch can expose it without
+  // a type assertion. Undefined until the pairing subclass implements it.
+  protected createLocalPairingOffer?(
+    params: PairingCreateOfferParams
+  ): Promise<PairingCreateOfferResult>
+
   // Why: Unix socket dispatch is one-shot and auths via the shared token from the 0o600 metadata file. See §3.1.
   protected async handleMessage(
     rawMessage: string,
@@ -36,18 +47,55 @@ export class RuntimeRpcRequestAdmission extends RuntimeRpcBinaryRouting {
     }
 
     try {
-      return await this.dispatcher.dispatch(request, {
+      const dispatch = this.dispatcher.dispatch(request, {
         signal:
           longPoll ||
           request.method === 'linear.commentEdit' ||
           request.method === 'linear.commentDelete'
             ? context?.signal
             : undefined,
-        callerScope
+        callerScope,
+        // Why: pairing.createOffer mints operator offers without a serve
+        // restart; undefined on builds where the pairing subclass is absent.
+        localPairing: this.createLocalPairingOffer
+          ? { createOffer: this.createLocalPairingOffer.bind(this) }
+          : undefined
       })
+      // Why: long-polls legitimately outlive any short deadline — keepalives plus the abort
+      // signal are their bound instead. Only short dispatches race the deadline.
+      if (longPoll) {
+        return await dispatch
+      }
+      return await this.awaitDispatchDeadline(request, dispatch)
     } finally {
       this.releaseLongPoll(longPoll)
     }
+  }
+
+  // Why: a dispatch that never settles pins the socket's inflight slot — the transport suspends
+  // the idle reaper while a dispatch is pending, so enough wedged handlers exhaust the connection
+  // budget and later connections handshake without ever being served. The raced-off dispatch keeps
+  // running (a dispatch cannot be cancelled): its late reply lands on an already-answered request,
+  // and the catch keeps a late rejection from going unhandled.
+  protected awaitDispatchDeadline(
+    request: RpcRequest,
+    dispatch: Promise<RpcResponse>
+  ): Promise<RpcResponse> {
+    void dispatch.catch(() => {})
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<RpcResponse>((resolve) => {
+      timer = setTimeout(() => {
+        resolve(
+          this.buildError(
+            request.id,
+            'runtime_timeout',
+            `${request.method} handler did not settle within ${this.dispatchDeadlineMs}ms`
+          )
+        )
+      }, this.dispatchDeadlineMs)
+      timer.unref?.()
+    })
+    return Promise.race([dispatch, deadline]).finally(() => clearTimeout(timer))
   }
 
   // Why: one fence for both transports — the total cap protects short RPCs, the ask

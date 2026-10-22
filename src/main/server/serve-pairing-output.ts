@@ -4,16 +4,17 @@ import { isAbsolute } from 'node:path'
 
 export async function renderServePairingQr(pairingUrl: string): Promise<string | null> {
   // Why dynamic: qrcode is only reachable from mobile pairing, so launch should
-  // not parse it for the majority who never pair a device.
-  const QRCode = await import('qrcode')
+  // not parse it for the majority who never pair a device. Inside the try so a
+  // module-resolution failure degrades to qr: null instead of failing the mint.
   try {
-    return await QRCode.toString(pairingUrl, { type: 'terminal', small: true })
-  } catch {
+    const QRCode = await import('qrcode')
     try {
-      return await QRCode.toString(pairingUrl, { type: 'utf8' })
+      return await QRCode.toString(pairingUrl, { type: 'terminal', small: true })
     } catch {
-      return null
+      return await QRCode.toString(pairingUrl, { type: 'utf8' })
     }
+  } catch {
+    return null
   }
 }
 

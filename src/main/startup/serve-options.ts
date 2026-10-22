@@ -9,6 +9,7 @@ export type ServeOptions = {
   pairingAddress: string | null
   noPairing: boolean
   mobilePairing: boolean
+  pairingAllScopes: boolean
   grantDesktopControl: boolean
   recipeJson: boolean
   projectRoot: string | null
@@ -119,6 +120,10 @@ export function getServeOptions(argv: readonly string[]): ServeOptions {
     ),
     noPairing: lastBooleanValue(optionsArgv, ['--serve-no-pairing', '--no-pairing']),
     mobilePairing: lastBooleanValue(optionsArgv, ['--serve-mobile-pairing', '--mobile-pairing']),
+    pairingAllScopes: lastBooleanValue(optionsArgv, [
+      '--serve-pairing-all-scopes',
+      '--pairing-all-scopes'
+    ]),
     grantDesktopControl: lastBooleanValue(optionsArgv, [
       '--serve-grant-desktop-control',
       '--grant-desktop-control'

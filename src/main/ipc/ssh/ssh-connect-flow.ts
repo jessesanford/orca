@@ -26,6 +26,11 @@ import {
   connectInFlight,
   isCurrentConnectAttempt
 } from './ssh-connect-attempt-registry'
+import { SSH_CONNECT_ADMISSION_TIMEOUT_MS } from '../../ssh/connection/ssh-connection-timing'
+import {
+  PromiseSettlementWaiters,
+  sharedPromiseSettlementWaiters
+} from '../../../shared/promise-settlement-waiters'
 import { connectionManager } from './ssh-ipc-context'
 import { abandonDecisionTransport } from './ssh-session-teardown'
 import { awaitTargetLifecycle } from './ssh-target-lifecycle-queue'
@@ -77,14 +82,27 @@ export async function connectTarget(
 async function admitConnect(targetId: string): Promise<SshConnectionState> {
   // Why: fence callers that entered before a same-turn disconnect/reset but resume after its cleanup.
   const admissionAuthority = getSshProviderAuthority(targetId)
-  await awaitTargetLifecycle(targetId)
+  // Why bounded: a lifecycle op that never settles would park this connect — and every
+  // ssh.connect dispatch behind it — forever (dead-VM teardown wedge). The waiters detach on
+  // timeout; the queued op itself keeps running.
+  await new PromiseSettlementWaiters(awaitTargetLifecycle(targetId)).wait({
+    timeoutMs: SSH_CONNECT_ADMISSION_TIMEOUT_MS,
+    createTimeoutError: () =>
+      createConnectAdmissionTimeoutError(targetId, 'pending lifecycle operations')
+  })
 
   // Why: serialize concurrent ssh:connect for the same target; interleaved connects otherwise leak the first session.
   const existing = connectInFlight.get(targetId)
   let replacePendingTransport = false
   if (existing) {
     if (isCurrentConnectAttempt(targetId, existing.authority)) {
-      return existing.promise
+      // Why bounded: joining a connect whose attempt wedged mid-flight must fail rather than
+      // inherit the wedge. The shared waiters let each joiner abandon independently.
+      return sharedPromiseSettlementWaiters(existing.promise).wait({
+        timeoutMs: SSH_CONNECT_ADMISSION_TIMEOUT_MS,
+        createTimeoutError: () =>
+          createConnectAdmissionTimeoutError(targetId, 'the in-flight connect')
+      })
     }
   }
   if (!isCurrentConnectAttempt(targetId, admissionAuthority)) {
@@ -204,4 +222,10 @@ function adoptCurrentTransport(targetId: string, owner: symbol): void {
   if (current) {
     adoptSshConnection(current, owner)
   }
+}
+
+// Why a plain Error: the ssh.connect RPC method flattens every connect failure through
+// getPublicSshError and the IPC path surfaces only the message — no classifier reads a code here.
+function createConnectAdmissionTimeoutError(targetId: string, waitingOn: string): Error {
+  return new Error(`Timed out waiting for ${waitingOn} on SSH target "${targetId}"`)
 }

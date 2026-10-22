@@ -6,6 +6,7 @@ import {
 import { RegisterDeviceKeyParamsSchema } from '../../../../shared/device-key-registration-contract'
 import { REGISTER_DEVICE_KEY_METHOD } from '../../../../shared/device-key-capability'
 import {
+  PairingCreateOfferParamsSchema,
   PairingGetEndpointsParamsSchema,
   PairingProvisionRelayParamsSchema
 } from '../../../../shared/mobile-relay-credential-contract'
@@ -31,6 +32,17 @@ export const PAIRING_METHODS = [
         throw new Error('pairing_context_unavailable')
       }
       return await ctx.pairing.provisionRelay(params)
+    }
+  }),
+  defineMethod({
+    name: 'pairing.createOffer',
+    permission: 'pairing-admin',
+    params: PairingCreateOfferParamsSchema,
+    handler: async (params, ctx) => {
+      if (!ctx.localPairing) {
+        throw new Error('pairing_context_unavailable')
+      }
+      return await ctx.localPairing.createOffer(params)
     }
   }),
   defineMethod({

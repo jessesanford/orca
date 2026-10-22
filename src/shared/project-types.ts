@@ -68,13 +68,18 @@ export type ProjectHostSetup = {
 }
 
 export type ProjectHostSetupExistingFolderArgs = {
-  projectId: string
+  projectId?: string
   projectProviderIdentity?: ProjectProviderIdentity
   hostId: ExecutionHostId
   path: string
   kind?: RepoKind
   displayName?: string
   setupMethod?: RepoProjectHostSetupMethod
+  /** Headless registrants (e.g. a broker's register-target script) declare a
+   *  `repo:`-scoped project: suppress provider/Git-remote detection so the
+   *  folder keeps host-local project semantics instead of projecting into a
+   *  phantom `github:`/`git:` identity. */
+  hostLocal?: boolean
 }
 
 export type ProjectHostSetupCreateArgs = {

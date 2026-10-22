@@ -12,10 +12,19 @@ describe('getServeOptions', () => {
       pairingAddress: null,
       noPairing: true,
       mobilePairing: false,
+      pairingAllScopes: false,
       grantDesktopControl: false,
       recipeJson: false,
       projectRoot: null
     })
+  })
+
+  it('parses the complementary-scope pairing opt-in', () => {
+    expect(
+      getServeOptions(['/AppRun', '--serve', '--serve-pairing-all-scopes']).pairingAllScopes
+    ).toBe(true)
+    const cliFormArgv = normalizeServeModeArgv(['/AppRun', 'serve', '--pairing-all-scopes'])
+    expect(getServeOptions(cliFormArgv).pairingAllScopes).toBe(true)
   })
 
   it('accepts equals-form values in the normalized shape', () => {
@@ -143,6 +152,7 @@ describe('getServeOptions', () => {
       pairingAddress: null,
       noPairing: false,
       mobilePairing: false,
+      pairingAllScopes: false,
       grantDesktopControl: false,
       recipeJson: false,
       projectRoot: null

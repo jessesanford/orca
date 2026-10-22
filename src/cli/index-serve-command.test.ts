@@ -68,6 +68,7 @@ describe('orca cli worktree awareness', () => {
       pairingAddress: '100.64.1.20',
       noPairing: true,
       mobilePairing: false,
+      pairingAllScopes: false,
       grantDesktopControl: false,
       recipeJson: false,
       projectRoot: null
@@ -120,10 +121,21 @@ describe('orca cli worktree awareness', () => {
       pairingAddress: '100.64.1.20',
       noPairing: false,
       mobilePairing: true,
+      pairingAllScopes: false,
       grantDesktopControl: false,
       recipeJson: false,
       projectRoot: null
     })
+  })
+
+  it('forwards --pairing-all-scopes to the serve host', async () => {
+    serveOrcaAppMock.mockResolvedValue(0)
+
+    await main(['serve', '--pairing-all-scopes'], '/tmp/repo')
+
+    expect(serveOrcaAppMock).toHaveBeenCalledWith(
+      expect.objectContaining({ pairingAllScopes: true, mobilePairing: false })
+    )
   })
 
   it('starts a recipe JSON headless server for VM recipes', async () => {
@@ -147,6 +159,7 @@ describe('orca cli worktree awareness', () => {
       pairingAddress: 'wss://sandbox.example.com',
       noPairing: false,
       mobilePairing: false,
+      pairingAllScopes: false,
       grantDesktopControl: false,
       recipeJson: true,
       projectRoot: '/workspace/repo'

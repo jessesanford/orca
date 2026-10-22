@@ -1,7 +1,8 @@
 import {
   GIT_REMOTE_PROJECT_ID_PREFIX,
   getGitRemoteProviderIdentity,
-  getProjectIdForProviderIdentity
+  getProjectIdForProviderIdentity,
+  isHostLocalProjectId
 } from './project-host-setup-projection'
 import type { ProjectProviderIdentity } from './project-types'
 import type { Repo } from './repo-types'
@@ -44,7 +45,12 @@ export function resolveImportedFolderProjectLink(
   folder: Pick<Repo, 'gitRemoteIdentity'>,
   projectId: string,
   providerIdentity: ProjectProviderIdentity | undefined
-): Pick<Repo, 'upstream'> | Pick<Repo, 'gitRemoteIdentity'> {
+): Partial<Pick<Repo, 'upstream' | 'gitRemoteIdentity'>> {
+  // A `repo:`-keyed project is host-local by definition — re-linking an imported
+  // folder to it strips any provider/remote identity the add probe stamped.
+  if (isHostLocalProjectId(projectId)) {
+    return { upstream: null, gitRemoteIdentity: null }
+  }
   if (providerIdentity && getProjectIdForProviderIdentity(providerIdentity) === projectId) {
     assertImportedFolderRemoteMatchesProject(folder, providerIdentity)
     return {

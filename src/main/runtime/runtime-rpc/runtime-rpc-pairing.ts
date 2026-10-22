@@ -1,5 +1,10 @@
 import type { RuntimeDeviceGrant } from '../rpc/rpc-caller-scope'
 import type { DeviceRegistry, DeviceScope, TokenDeviceEntry } from '../device-registry'
+import type {
+  PairingCreateOfferParams,
+  PairingCreateOfferResult
+} from '../../../shared/mobile-relay-credential-contract'
+import { RuntimeRpcLocalPairingOffer } from './runtime-rpc-local-pairing-offer'
 import type { E2EEKeypair } from '../e2ee-keypair'
 import type { MobileSocketWiring } from '../rpc/mobile-socket-wiring'
 import type {
@@ -24,8 +29,8 @@ import {
   DEVICE_REGISTRY_UNAVAILABLE_GUIDANCE,
   E2EE_KEY_UNAVAILABLE_GUIDANCE,
   pairingUnavailable,
-  type MobileRelayPairingProvider,
-  type PairingOfferUnavailable
+  type DirectPairingOffer,
+  type MobileRelayPairingProvider
 } from './runtime-rpc-pairing-types'
 
 export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
@@ -134,6 +139,20 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
     return ws?.endpoint ?? null
   }
 
+  private localPairingOfferMinter: RuntimeRpcLocalPairingOffer | null = null
+
+  // Why: unix-socket operator path (headless brokers). Unlike the startup
+  // readiness offers this is minted on demand — no serve restart, so a pairing
+  // flow never bounces connected SSH targets. Implements the optional hook
+  // declared on RuntimeRpcRequestAdmission; the mint discipline itself lives in
+  // RuntimeRpcLocalPairingOffer (reach derivation, dedup, relay-safe rotation).
+  protected createLocalPairingOffer(
+    params: PairingCreateOfferParams
+  ): Promise<PairingCreateOfferResult> {
+    this.localPairingOfferMinter ??= new RuntimeRpcLocalPairingOffer(this)
+    return this.localPairingOfferMinter.createOffer(params)
+  }
+
   createPairingOffer(args: {
     address?: string | null
     name?: string
@@ -144,15 +163,7 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
     reach?: RuntimePairingReach
     // Why: administrative permissions exist only when granted here, never added to a paired device later.
     grants?: readonly RuntimeDeviceGrant[]
-  }):
-    | PairingOfferUnavailable
-    | {
-        available: true
-        pairingUrl: string
-        endpoint: string
-        deviceId: string
-        webClientUrl: string | null
-      } {
+  }): DirectPairingOffer {
     if (this.pairingInitializationFailure) {
       return this.pairingInitializationFailure
     }
@@ -178,6 +189,19 @@ export class RuntimeRpcPairing extends RuntimeRpcNetworkExposure {
     const endpoint = advertised.endpoint
     const deviceName = args.name ?? `CLI ${new Date().toLocaleDateString()}`
     const scope = args.scope ?? 'runtime'
+    // Why: record the durable cloud revoke before rotating the local token so
+    // an old relay invite can't outlive the offer that replaces it. Lives in
+    // the choke point so every rotate path (IPC, serve secondary, operator
+    // RPC) is covered, not just the mobile QR flow.
+    if (scope === 'mobile' && args.rotate) {
+      const pending = this.deviceRegistry.getPendingDevice('mobile')
+      if (pending?.relayBinding && !this.queueRelayDeviceRevoke(pending.relayBinding)) {
+        return pairingUnavailable(
+          'device_registry_unavailable',
+          'Could not persist Relay cleanup before rotating the pairing code.'
+        )
+      }
+    }
     let device: TokenDeviceEntry
     try {
       const reach = args.reach ?? 'network'
