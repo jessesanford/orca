@@ -30,6 +30,7 @@ import { startWindowsDesktopBeforeShellPathReady } from './windows-desktop-shell
 import { repairKnownPoisonedInstallDirBeforeWindow } from './windows-install-dir-acl-recovery'
 import { installServeQuitHandling } from './serve-quit-handling'
 import { installCloudSessionShutdownFlush } from './cloud-session-shutdown-flush'
+import { activateHeadlessServeEnvironmentStatuses } from './headless-serve-environment-activation'
 import { registerHeadlessServeSshHandlers } from './headless-serve-ssh-registration'
 import { settleServeDesktopActivation } from './serve-desktop-activation'
 import {
@@ -174,6 +175,7 @@ async function launchServeMode(
   publishHeadlessRuntimeGraph(runtime)
   // Why before RPC binds: the first paired client must already see this host's SSH targets.
   registerHeadlessServeSshHandlers(state.store!, runtime)
+  activateHeadlessServeEnvironmentStatuses()
   await runtimeRpc.start().catch((error) => {
     console.error('[runtime] Failed to start headless RPC transport:', error)
     throw error
