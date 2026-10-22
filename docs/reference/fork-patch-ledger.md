@@ -186,3 +186,30 @@ branches.
   → `repo:`-scoped standalone project → mTLS daemon probe; idempotent re-register;
   `ssh.removeTarget` leaves zero residue. `pairing.createOffer` mints both scopes with a
   scannable terminal QR and the advertised `ws://` endpoint, without restarting serve.
+
+## Build record: 2026-10-22 broker dist (v1.4.214)
+
+Served dist rebuilt on `build/broker-dist-20261022` for `orca-broker-2` after
+mobile clients rejected the pre-rebuild binary as too old.
+
+- Tree: `upstream/main` + `feat/pairing-createoffer` + `feat/hostlocal-existing-folder`
+  + `fix/serve-rpc-dispatch-deadline` + `fix/legacy-relay-incumbent-probe`
+  (octopus merge `88219c7c32`) + compat commit `c694efc8fc`.
+- Compat commit covers upstream type drift only: optional
+  `ProjectHostSetupExistingFolderArgs.projectId` threaded through setupExistingFolder
+  internals, `SSH_CONNECT_ADMISSION_TIMEOUT_MS` widened to `number`, and
+  `pairingAllScopes: false` added to two ServeOptions test literals.
+- New requirement discovered: **managed-orcad template**. `ssh.connect` now calls
+  `hasTemplate()` before transport; without `resources/orcad-template` in the dist
+  it returns `unserved`/`orcad_unavailable`/`artifacts_unavailable` instantly and
+  silently. Template built via `build-orcad-template.mjs --targets
+  linux-arm64-glibc` (orcad `0.1.0+2858c2d16578`) and copied into the packaged
+  resources; it can be dropped into a running dist without rebuild
+  (existsSync-checked per connect).
+- Build host must run Node 24 (`nvm use 24.22.1`): on Node 22 `node:sqlite` is
+  absent from `builtinModules` and afterPack's bare-runtime-imports check fails.
+- `mobile/` remains a separate pnpm workspace — install it explicitly or
+  `build:mobile-web` fails on ~570 unresolvable expo imports.
+- Runtime pairing is now per-scope: `pairing.createOffer` accepts
+  `scope: "runtime"|"mobile"` only; `orca-pair-client.py` already mints both via
+  two calls.
