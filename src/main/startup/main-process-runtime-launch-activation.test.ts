@@ -294,7 +294,8 @@ describe('desktop startup activation', () => {
       mobilePairing: false,
       grantDesktopControl: false,
       recipeJson: false,
-      projectRoot: null
+      projectRoot: null,
+      pairingAllScopes: false
     })
     Object.assign(state.runtime!, {
       refreshRestoredOrchestrationAuthority: vi.fn(async () => {}),
@@ -329,7 +330,8 @@ describe('desktop startup activation', () => {
       mobilePairing: false,
       grantDesktopControl: false,
       recipeJson: false,
-      projectRoot: null
+      projectRoot: null,
+      pairingAllScopes: false
     })
     Object.assign(state.runtime!, {
       refreshRestoredOrchestrationAuthority: vi.fn(async () => {}),

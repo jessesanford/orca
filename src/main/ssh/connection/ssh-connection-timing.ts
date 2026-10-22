@@ -8,7 +8,7 @@ export const SSH_CREDENTIAL_TIMEOUT_MS = 120_000
 // attempt; a wedged one must fail the waiter instead of parking it forever. Covers a credential
 // prompt plus a connect with slack for a first relay deploy — the same budget the renderer's
 // SSH_RECONNECT_UI_TIMEOUT_MS uses for the same reasons.
-export const SSH_CONNECT_ADMISSION_TIMEOUT_MS = 180_000
+export const SSH_CONNECT_ADMISSION_TIMEOUT_MS: number = 180_000
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))

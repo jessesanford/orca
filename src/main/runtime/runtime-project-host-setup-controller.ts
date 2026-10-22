@@ -246,7 +246,7 @@ export class RuntimeProjectHostSetupController {
   }
 
   private completeSetup(
-    args: ProjectHostSetupExistingFolderArgs,
+    args: ProjectHostSetupExistingFolderArgs & { projectId: string },
     initialRepo: Repo,
     repoWasCreated: boolean,
     folderRemote: Pick<Repo, 'gitRemoteIdentity'>
@@ -267,7 +267,7 @@ export class RuntimeProjectHostSetupController {
   }
 
   private linkRepo(
-    args: ProjectHostSetupExistingFolderArgs,
+    args: ProjectHostSetupExistingFolderArgs & { projectId: string },
     initialRepo: Repo,
     folderRemote: Pick<Repo, 'gitRemoteIdentity'>
   ): ProjectHostSetupResult {
