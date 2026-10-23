@@ -213,3 +213,21 @@ mobile clients rejected the pre-rebuild binary as too old.
 - Runtime pairing is now per-scope: `pairing.createOffer` accepts
   `scope: "runtime"|"mobile"` only; `orca-pair-client.py` already mints both via
   two calls.
+
+
+## Upstream candidate: fix/managed-orcad-reconnect-wake (2026-10-23)
+
+- Branch: `fix/managed-orcad-reconnect-wake` (single commit `a1496054` off
+  `upstream/main` `52e413ec`).
+- Issue: stablyai/orca#32177. PR: stablyai/orca#32187.
+- Root cause verified live: managed remote orcad exits (idle/reboot) leaving
+  `~/.orca/orcad.lock`; the wake path IS wired but the remote launch dies at
+  `acquireOrcadInstanceLock` — stale record's `bootId` names a previous boot,
+  host has no `/etc/machine-id`, data root is non-local fs → locality
+  `unknown` → `orcad_instance_lock_held` forever.
+- Fix: client assigns `ORCA_ORCAD_MACHINE_IDENTITY` (sha256 of target id) on
+  every managed launch; orcad records it as `machineIdentity` only when the
+  OS supplies none → own-machine reclaim across reboots, foreign still refused.
+- If merged upstream, this patch is absorbed; the host-side
+  `ensure-remote-orcad.sh` workaround stays until a fixed orcad template is
+  deployed. Pre-existing stale locks still need one manual sweep.
