@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { ORCAD_MANAGED_ACTIVATION_ROOT_ENV } from '../../../shared/orcad-managed-launch-env'
+import {
+  ORCAD_MACHINE_IDENTITY_ENV,
+  ORCAD_MANAGED_ACTIVATION_ROOT_ENV
+} from '../../../shared/orcad-managed-launch-env'
 
 import {
   ORCAD_READINESS_FILENAME,
@@ -75,6 +78,13 @@ describe('orcadLaunchCommand', () => {
 
   it('declares the Windows refusal instead of emitting a command that cannot work', () => {
     expect(() => orcadLaunchCommand(windows, SPEC)).toThrow(OrcadRemoteLaunchUnsupportedError)
+  })
+
+  it('passes the assigned machine identity only when the spec names one', () => {
+    expect(orcadLaunchCommand(posix, SPEC)).not.toContain(ORCAD_MACHINE_IDENTITY_ENV)
+    const assigned = orcadLaunchCommand(posix, { ...SPEC, machineIdentity: 'managed:abc123' })
+    expect(assigned).toContain(`${ORCAD_MACHINE_IDENTITY_ENV}='managed:abc123'`)
+    expect(assigned.indexOf(ORCAD_MACHINE_IDENTITY_ENV)).toBeLessThan(assigned.indexOf('nohup'))
   })
 })
 

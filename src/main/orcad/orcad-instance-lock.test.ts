@@ -537,6 +537,61 @@ describe('acquireOrcadInstanceLock', () => {
     expect(acquireOrcadInstanceLock(root, hooks()).record.machineIdentity).toBe('machine-a')
   })
 
+  it('records an assigned machine identity only when the OS names no machine', () => {
+    const assigned = { assignedMachineIdentity: () => 'managed:x' }
+    const root = makeRoot()
+    // The host's own identity wins: a managed env var must never rewrite real machine records.
+    const osHeld = acquireOrcadInstanceLock(root, hooks(assigned))
+    expect(osHeld.record.machineIdentity).toBe('machine-a')
+    osHeld.release()
+    writeFileSync(
+      join(root, ORCAD_LOCK_FILE_NAME),
+      JSON.stringify(persistedRecord({ machineIdentity: 'managed:x' }))
+    )
+    const noOsIdentity = {
+      ...assigned,
+      machineIdentity: () => null,
+      dataRootIsOnLocalDisk: () => false
+    }
+    const lock = acquireOrcadInstanceLock(root, hooks(noOsIdentity))
+    expect(readOrcadInstanceLockRecord(lock.path)?.machineIdentity).toBe('managed:x')
+  })
+
+  it('reclaims its own assigned-identity record after a reboot on a shared root', () => {
+    const root = makeRoot()
+    const lockPath = join(root, ORCAD_LOCK_FILE_NAME)
+    // The incident shape: this machine's orcad wrote the record on a previous kernel boot of a
+    // host whose OS supplies no machine identity, on a data root other machines may share.
+    writeFileSync(
+      lockPath,
+      JSON.stringify(
+        persistedRecord({ machineIdentity: 'managed:x', bootId: 'boot-old', linuxStartTicks: '4' })
+      )
+    )
+    const rebooted = {
+      machineIdentity: () => null,
+      assignedMachineIdentity: () => 'managed:x',
+      dataRootIsOnLocalDisk: () => false,
+      incarnation: () => ({ linuxStartTicks: '9', bootId: 'boot-new' })
+    }
+    const lock = acquireOrcadInstanceLock(root, hooks(rebooted))
+    expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe(lock.record.nonce)
+    lock.release()
+
+    // A different machine's assigned identity is still foreign, dead pid or not.
+    writeFileSync(
+      lockPath,
+      JSON.stringify(persistedRecord({ machineIdentity: 'managed:y', bootId: 'boot-old' }))
+    )
+    expect(() => acquireOrcadInstanceLock(root, hooks(rebooted))).toThrow(
+      expect.objectContaining({
+        code: 'orcad_instance_lock_held',
+        message: expect.stringContaining('from another machine')
+      })
+    )
+    expect(readOrcadInstanceLockRecord(lockPath)?.machineIdentity).toBe('managed:y')
+  })
+
   it('admits one owner when reclaimers of the same stale lock interleave', () => {
     const root = makeRoot()
     const lockPath = join(root, ORCAD_LOCK_FILE_NAME)

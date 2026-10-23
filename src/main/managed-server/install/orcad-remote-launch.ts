@@ -48,7 +48,10 @@ import {
   ORCAD_E2E_IDLE_TIMEOUT_ENV,
   readOrcadE2EIdleTimeoutMs
 } from '../../../shared/orcad-idle-exit'
-import { ORCAD_MANAGED_ACTIVATION_ROOT_ENV } from '../../../shared/orcad-managed-launch-env'
+import {
+  ORCAD_MACHINE_IDENTITY_ENV,
+  ORCAD_MANAGED_ACTIVATION_ROOT_ENV
+} from '../../../shared/orcad-managed-launch-env'
 
 export type OrcadLaunchSpec = {
   remoteInstallDir: string
@@ -61,6 +64,8 @@ export type OrcadLaunchSpec = {
   port: number
   /** The host's activation fence. Every SSH launch is client-managed, so every one may idle out. */
   activationRoot: string
+  /** The machine identity the client assigns this host; orcad's OS identity still wins when present. */
+  machineIdentity?: string
 }
 
 /** Env a managed launch adds; an older orcad ignores both. */
@@ -71,6 +76,9 @@ export function orcadManagedLaunchEnv(
   const e2eTimeout = readOrcadE2EIdleTimeoutMs(env)
   return [
     [ORCAD_MANAGED_ACTIVATION_ROOT_ENV, spec.activationRoot],
+    ...(spec.machineIdentity
+      ? [[ORCAD_MACHINE_IDENTITY_ENV, spec.machineIdentity] satisfies [string, string]]
+      : []),
     ...(e2eTimeout === null
       ? []
       : [[ORCAD_E2E_IDLE_TIMEOUT_ENV, String(e2eTimeout)] satisfies [string, string]])

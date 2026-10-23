@@ -34,6 +34,7 @@ import {
 import { hasErrorCode, isProcessAlive } from '../daemon/daemon-process-inspection'
 import { profileStateAccessMachineIdentity } from '../persistence/profile-state/profile-state-access-identity'
 import { orcadDataRootIsOnLocalDisk } from './orcad-data-root-locality'
+import { ORCAD_MACHINE_IDENTITY_ENV } from '../../shared/orcad-managed-launch-env'
 import {
   MAX_ORCAD_LOCK_BYTES,
   readBoundedLockFile,
@@ -102,6 +103,12 @@ export type OrcadInstanceLockHooks = OrcadDataRootPrivacyHooks & {
    */
   role?: 'orcad' | 'desktop'
   machineIdentity?: () => string | null
+  /**
+   * The machine identity a managed launch assigned this host (ORCA_ORCAD_MACHINE_IDENTITY),
+   * used only when the OS names no machine: a container without `/etc/machine-id` on a
+   * possibly-shared data root could otherwise never reclaim its own previous boot's record.
+   */
+  assignedMachineIdentity?: () => string | null
   /** Whether no other machine can reach the data root, for records that name no machine. */
   dataRootIsOnLocalDisk?: (dataRoot: string) => boolean
 }
@@ -162,7 +169,9 @@ export function acquireOrcadInstanceLock(
   }
 
   const lockPath = join(dataRoot, ORCAD_LOCK_FILE_NAME)
-  const machineIdentity = (hooks.machineIdentity ?? profileStateAccessMachineIdentity)()
+  const machineIdentity =
+    (hooks.machineIdentity ?? profileStateAccessMachineIdentity)() ??
+    (hooks.assignedMachineIdentity ?? readOrcadAssignedMachineIdentity)()
   const record: OrcadLockRecord = {
     pid: process.pid,
     startedAtMs: readStartedAt(process.pid),
@@ -317,6 +326,12 @@ export function orcadPeerPidIsJudgeableHere(
     return false
   }
   return orcadLockHolderLocality(peer, self, dataRootIsOnLocalDisk) === 'local'
+}
+
+/** The launch env's assigned machine identity, or null when unset or unrecordable. */
+function readOrcadAssignedMachineIdentity(): string | null {
+  const value = process.env[ORCAD_MACHINE_IDENTITY_ENV]?.trim()
+  return value && value.length <= 255 ? value : null
 }
 
 /** A record without a boot id cannot tell its holder from a reused PID; say so. */

@@ -44,6 +44,8 @@ export type OrcadSlotOptions = OrcadRemoteExecTarget & {
   userDataDir: string
   bindHost: string
   port: number
+  /** The machine identity a managed launch records in the instance lock when the host's OS has none. */
+  machineIdentity?: string
   readinessTimeoutMs?: number
   sleep?: (ms: number) => Promise<void>
 }
@@ -80,6 +82,7 @@ export function launchOrcadSlot(
       userDataDir: options.userDataDir,
       bindHost: options.bindHost,
       port: options.port,
+      machineIdentity: options.machineIdentity,
       // Every SSH launch is client-managed, so every one may idle out and be woken on connect.
       activationRoot: orcadActivationTransactionRoot(options.host, options.remoteHome)
     },

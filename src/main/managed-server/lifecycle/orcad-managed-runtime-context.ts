@@ -17,6 +17,7 @@ import {
 } from '../../../shared/orcad-terminal-census'
 import { probeActiveOrcadReadiness } from '../../ssh/orcad-active-readiness'
 import { resolveOrcadRemoteContext, type OrcadRemoteContext } from '../install/orcad-remote-context'
+import { orcadAssignedMachineIdentity } from './orcad-assigned-machine-identity'
 import { ORCAD_INSTALL_MODEL } from '../install/remote-install-model'
 import { computeRemoteInstallDir } from '../install/remote-versioned-install'
 import {
@@ -91,6 +92,8 @@ export function managedOrcadSlot(
     userDataDir: context.userDataDir,
     bindHost: ORCAD_BIND_HOST,
     port,
+    // orcad's own OS machine identity still wins where the host has one; this covers the rest.
+    machineIdentity: orcadAssignedMachineIdentity(context.target.id),
     signal
   }
 }
